@@ -1,0 +1,7 @@
+{
+  "name": "VitrinePro Catalog",
+  "description": "A modern, mobile-first product catalog with a robust admin panel for managing products, images, and visual themes.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
