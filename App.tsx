@@ -1,58 +1,59 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { ProductCard } from './components/ProductCard';
-import { AdminDashboard } from './components/AdminDashboard';
-import { ProductForm } from './components/ProductForm';
-import { AdminLogin } from './components/AdminLogin';
-import { ProductModal } from './components/ProductModal';
 import { CartDrawer } from './components/CartDrawer';
+import { Home } from './pages/Home';
+import { AuthPage } from './pages/AuthPage';
+import { AdminPage } from './pages/AdminPage';
+import { AccountPage } from './pages/AccountPage';
+import { CheckoutPage } from './pages/CheckoutPage';
+import { OrderDetailsPage } from './pages/OrderDetailsPage';
+import { NotFound } from './pages/NotFound';
 import { StorageService } from './services/storageService';
 import { api } from './services/api';
-import { Product, AppConfig, ViewState, CartItem } from './types';
-import { Search } from 'lucide-react';
+import { customerAuth } from './services/customerAuth';
+import { Product, AppConfig, CartItem, Customer } from './types';
 
-const App: React.FC = () => {
-  // Application State
-  const [view, setView] = useState<ViewState>('CATALOG');
-  const [products, setProducts] = useState<Product[]>([]);
+const AppContent: React.FC = () => {
+  const navigate = useNavigate();
+  
+  // State
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [config, setConfig] = useState<AppConfig>({ storeName: 'VitrinePro', primaryColor: '#3b82f6', secondaryColor: '#10b981' });
+  const [config, setConfig] = useState<AppConfig>({ 
+    storeName: 'VitrinePro', 
+    primaryColor: '#3b82f6', 
+    secondaryColor: '#10b981' 
+  });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
-  
-  // Selection State
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [editingProduct, setEditingProduct] = useState<Product | undefined>(undefined);
-  const [catalogSearch, setCatalogSearch] = useState('');
+  const [customer, setCustomer] = useState<Customer | null>(null);
 
   // Initial Load
   useEffect(() => {
-    loadData();
+    loadConfig();
     setCart(StorageService.getCart());
+    
     const session = sessionStorage.getItem('vitrine_session');
     if (session === 'true') setIsAuthenticated(true);
+    
+    const savedCustomer = customerAuth.getSession();
+    if (savedCustomer) setCustomer(savedCustomer);
   }, []);
 
-  const loadData = async () => {
+  const loadConfig = async () => {
     try {
-      const [productsData, configData] = await Promise.all([
-        api.getProducts(),
-        api.getConfig()
-      ]);
-      setProducts(productsData);
+      const configData = await api.getConfig();
       if (configData.store_name) {
         setConfig({
           storeName: configData.store_name,
           primaryColor: configData.primary_color,
           secondaryColor: configData.secondary_color,
-          whatsappNumber: configData.whatsapp_number
+          whatsappNumber: configData.whatsapp_number,
+          logo_url: configData.logo_url
         });
       }
     } catch (err) {
-      console.error('Erro ao carregar dados:', err);
-    } finally {
-      setLoading(false);
+      console.error('Erro ao carregar configuração');
     }
   };
 
@@ -98,49 +99,12 @@ const App: React.FC = () => {
     StorageService.saveCart([]);
   };
 
-  // Auth Actions
-  const handleLogin = async (username: string, password: string) => {
-    try {
-      await api.login(username, password);
-      setIsAuthenticated(true);
-      sessionStorage.setItem('vitrine_session', 'true');
-      setView('ADMIN_DASHBOARD');
-      return true;
-    } catch (err) {
-      return false;
-    }
-  };
-
   const handleLogout = () => {
     setIsAuthenticated(false);
     sessionStorage.removeItem('vitrine_session');
-    setView('CATALOG');
-  };
-
-  // Product Actions
-  const handleSaveProduct = async (product: Product) => {
-    try {
-      if (editingProduct) {
-        await api.updateProduct(product.id, product);
-        setProducts(products.map(p => p.id === product.id ? product : p));
-      } else {
-        await api.createProduct(product);
-        setProducts([product, ...products]);
-      }
-      setView('ADMIN_DASHBOARD');
-      setEditingProduct(undefined);
-    } catch (err) {
-      alert('Erro ao salvar produto');
-    }
-  };
-
-  const handleDeleteProduct = async (id: string) => {
-    try {
-      await api.deleteProduct(id);
-      setProducts(products.filter(p => p.id !== id));
-    } catch (err) {
-      alert('Erro ao deletar produto');
-    }
+    customerAuth.clearSession();
+    setCustomer(null);
+    navigate('/');
   };
 
   const handleUpdateConfig = async (newConfig: AppConfig) => {
@@ -149,103 +113,12 @@ const App: React.FC = () => {
         store_name: newConfig.storeName,
         primary_color: newConfig.primaryColor,
         secondary_color: newConfig.secondaryColor,
-        whatsapp_number: newConfig.whatsappNumber
+        whatsapp_number: newConfig.whatsappNumber,
+        logo_url: newConfig.logo_url
       });
       setConfig(newConfig);
     } catch (err) {
       alert('Erro ao atualizar configuração');
-    }
-  };
-
-  // View Routing Logic
-  const renderContent = () => {
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-spin w-12 h-12 border-4 border-primary border-t-transparent rounded-full" />
-        </div>
-      );
-    }
-
-    switch (view) {
-      case 'LOGIN':
-        return <AdminLogin onLogin={handleLogin} onCancel={() => setView('CATALOG')} />;
-      
-      case 'ADMIN_DASHBOARD':
-        if (!isAuthenticated) {
-            setView('LOGIN');
-            return null;
-        }
-        return (
-          <AdminDashboard 
-            products={products}
-            config={config}
-            onEditProduct={(p) => {
-              setEditingProduct(p);
-              setView('PRODUCT_FORM');
-            }}
-            onDeleteProduct={handleDeleteProduct}
-            onUpdateConfig={handleUpdateConfig}
-          />
-        );
-
-      case 'PRODUCT_FORM':
-        if (!isAuthenticated) return null;
-        return (
-          <ProductForm 
-            initialProduct={editingProduct}
-            onSave={handleSaveProduct}
-            onCancel={() => setView('ADMIN_DASHBOARD')}
-          />
-        );
-
-      case 'CATALOG':
-      default:
-        const filtered = products.filter(p => 
-            p.name.toLowerCase().includes(catalogSearch.toLowerCase())
-        );
-
-        return (
-          <div className="animate-fade-in">
-             {/* Search Hero */}
-             <div className="mb-8 relative">
-                <div className="relative max-w-md mx-auto">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Search className="h-5 w-5 text-slate-500" />
-                    </div>
-                    <input
-                        type="text"
-                        className="block w-full pl-10 pr-3 py-3 border border-slate-700 rounded-full leading-5 bg-slate-800 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary sm:text-sm shadow-lg transition-all"
-                        placeholder="O que você procura hoje?"
-                        value={catalogSearch}
-                        onChange={(e) => setCatalogSearch(e.target.value)}
-                    />
-                </div>
-             </div>
-
-             {/* Grid */}
-             {filtered.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {filtered.map(product => (
-                        <ProductCard 
-                            key={product.id} 
-                            product={product} 
-                            onClick={(p) => setSelectedProduct(p)}
-                            onAddToCart={handleAddToCart}
-                        />
-                    ))}
-                </div>
-             ) : (
-                <div className="text-center py-20">
-                    <div className="inline-block p-4 rounded-full bg-slate-800 mb-4 text-slate-500">
-                        <Search className="w-8 h-8" />
-                    </div>
-                    <h3 className="text-xl font-medium text-white mb-2">Nada encontrado</h3>
-                    <p className="text-slate-400">Tente buscar por outro termo.</p>
-                </div>
-             )}
-          </div>
-        );
     }
   };
 
@@ -255,22 +128,71 @@ const App: React.FC = () => {
     <>
       <Layout 
         config={config} 
-        currentView={view} 
         isAuthenticated={isAuthenticated}
         cartItemCount={totalCartItems}
-        onNavigate={setView}
+        customer={customer}
         onLogout={handleLogout}
         onToggleCart={() => setIsCartOpen(true)}
+        onShowAuth={() => navigate('/auth')}
       >
-        {renderContent()}
-      </Layout>
+        <Routes>
+          <Route path="/" element={<Home config={config} onAddToCart={handleAddToCart} />} />
+          
+          <Route 
+            path="/auth" 
+            element={
+              <AuthPage 
+                onCustomerSuccess={() => {
+                  const savedCustomer = customerAuth.getSession();
+                  if (savedCustomer) setCustomer(savedCustomer);
+                  navigate('/');
+                }}
+                onAdminSuccess={() => {
+                  setIsAuthenticated(true);
+                  navigate('/admin');
+                }}
+              />
+            } 
+          />
+          
+          <Route 
+            path="/admin" 
+            element={
+              <AdminPage 
+                isAuthenticated={isAuthenticated}
+                config={config}
+                onUpdateConfig={handleUpdateConfig}
+              />
+            } 
+          />
+          
+          <Route 
+            path="/minha-conta" 
+            element={
+              <AccountPage 
+                customer={customer}
+                onLogout={handleLogout}
+              />
+            } 
+          />
 
-      <ProductModal 
-        product={selectedProduct} 
-        onClose={() => setSelectedProduct(null)} 
-        onAddToCart={handleAddToCart}
-        config={config}
-      />
+          <Route 
+            path="/checkout" 
+            element={
+              <CheckoutPage 
+                customer={customer}
+                cart={cart}
+                config={config}
+                onClearCart={handleClearCart}
+              />
+            } 
+          />
+
+          <Route path="/pedido/:orderId" element={<OrderDetailsPage />} />
+          
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Layout>
 
       <CartDrawer 
         isOpen={isCartOpen}
@@ -282,6 +204,14 @@ const App: React.FC = () => {
         onClearCart={handleClearCart}
       />
     </>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 };
 

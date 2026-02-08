@@ -267,253 +267,48 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <div className="space-y-4 animate-fade-in">
               <p className="text-slate-400 text-center mb-6">Como você deseja finalizar sua compra?</p>
               
+              {/* Online - Recomendado */}
+              <div className="relative">
+                <div className="absolute -top-3 right-4 z-10">
+                  <span className="bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
+                    RECOMENDADO
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    onClose();
+                    window.location.href = '/checkout';
+                  }}
+                  className="w-full p-6 bg-primary hover:bg-blue-600 rounded-xl text-white font-semibold flex items-center gap-4 transition-all shadow-lg hover:shadow-primary/30 border border-primary/30"
+                >
+                  <ShoppingBag className="w-8 h-8 flex-shrink-0" />
+                  <div className="text-left flex-grow">
+                    <div className="text-lg">Compra Online</div>
+                    <div className="text-sm font-normal opacity-90">Rápido, seguro e prático</div>
+                  </div>
+                  <ArrowRight className="w-5 h-5 flex-shrink-0" />
+                </button>
+              </div>
+
               {/* WhatsApp */}
               <button
                 onClick={() => {
                   setPurchaseMethod('WHATSAPP');
                   handleWhatsAppCheckout();
                 }}
-                className="w-full p-6 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-white font-semibold flex items-center gap-4 transition-all shadow-lg hover:shadow-emerald-900/30"
+                className="w-full p-5 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium flex items-center gap-4 transition-all border border-slate-700"
               >
-                <MessageCircle className="w-8 h-8 flex-shrink-0" />
+                <MessageCircle className="w-7 h-7 flex-shrink-0 text-emerald-400" />
                 <div className="text-left flex-grow">
-                  <div className="text-lg">Comprar via WhatsApp</div>
-                  <div className="text-sm font-normal opacity-90">Fale direto com o vendedor</div>
-                </div>
-                <ArrowRight className="w-5 h-5 flex-shrink-0" />
-              </button>
-
-              {/* Online */}
-              <button
-                onClick={() => {
-                  setPurchaseMethod('ONLINE');
-                  setStep('CHECKOUT');
-                }}
-                className="w-full p-6 bg-primary hover:bg-blue-600 rounded-xl text-white font-semibold flex items-center gap-4 transition-all shadow-lg hover:shadow-primary/30"
-              >
-                <ShoppingBag className="w-8 h-8 flex-shrink-0" />
-                <div className="text-left flex-grow">
-                  <div className="text-lg">Compra Online</div>
-                  <div className="text-sm font-normal opacity-90">Preencher dados de entrega</div>
+                  <div className="text-base">Comprar via WhatsApp</div>
+                  <div className="text-sm font-normal text-slate-400">Fale direto com o vendedor</div>
                 </div>
                 <ArrowRight className="w-5 h-5 flex-shrink-0" />
               </button>
             </div>
           )}
 
-          {/* STEP 3: CHECKOUT FORM */}
-          {step === 'CHECKOUT' && (
-            <form id="checkout-form" onSubmit={handleCheckout} className="space-y-6 animate-fade-in">
-              
-              {/* Dados Pessoais */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                  <ShoppingBag className="w-4 h-4" /> Dados Pessoais
-                </h3>
-                
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Nome Completo</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={customer.name}
-                    onChange={e => setCustomer({...customer, name: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                    placeholder="João da Silva"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-400">CPF</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={customer.cpf}
-                      onChange={e => handleCpfChange(e.target.value)}
-                      className={`w-full bg-slate-800 border ${cpfError ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary`}
-                      placeholder="000.000.000-00"
-                      maxLength={14}
-                    />
-                    {cpfError && <p className="text-xs text-red-400">{cpfError}</p>}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-400">Telefone</label>
-                    <input 
-                      type="tel" 
-                      required
-                      value={customer.phone}
-                      onChange={e => setCustomer({...customer, phone: e.target.value})}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                      placeholder="(11) 99999-9999"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Endereço de Entrega */}
-              <div className="space-y-4 pt-4 border-t border-slate-700">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                  <Truck className="w-4 h-4" /> Endereço de Entrega
-                </h3>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">CEP</label>
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      required
-                      value={customer.cep}
-                      onChange={e => handleCepChange(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                      placeholder="00000-000"
-                      maxLength={9}
-                    />
-                    {loadingCep && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full" />
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-500">Digite o CEP para buscar o endereço automaticamente</p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Rua / Logradouro</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={customer.street}
-                    onChange={e => setCustomer({...customer, street: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                    placeholder="Rua das Flores"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-400">Número</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={customer.number}
-                      onChange={e => setCustomer({...customer, number: e.target.value})}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                      placeholder="123"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-400">Complemento</label>
-                    <input 
-                      type="text"
-                      value={customer.complement}
-                      onChange={e => setCustomer({...customer, complement: e.target.value})}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                      placeholder="Apto 45"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-400">Bairro</label>
-                  <input 
-                    type="text" 
-                    required
-                    value={customer.neighborhood}
-                    onChange={e => setCustomer({...customer, neighborhood: e.target.value})}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                    placeholder="Centro"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-400">Cidade</label>
-                    <input 
-                      type="text" 
-                      required
-                      value={customer.city}
-                      onChange={e => setCustomer({...customer, city: e.target.value})}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                      placeholder="São Paulo"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-400">Estado</label>
-                    <select 
-                      required
-                      value={customer.state}
-                      onChange={e => setCustomer({...customer, state: e.target.value})}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary"
-                    >
-                      <option value="">UF</option>
-                      <option value="AC">AC</option>
-                      <option value="AL">AL</option>
-                      <option value="AP">AP</option>
-                      <option value="AM">AM</option>
-                      <option value="BA">BA</option>
-                      <option value="CE">CE</option>
-                      <option value="DF">DF</option>
-                      <option value="ES">ES</option>
-                      <option value="GO">GO</option>
-                      <option value="MA">MA</option>
-                      <option value="MT">MT</option>
-                      <option value="MS">MS</option>
-                      <option value="MG">MG</option>
-                      <option value="PA">PA</option>
-                      <option value="PB">PB</option>
-                      <option value="PR">PR</option>
-                      <option value="PE">PE</option>
-                      <option value="PI">PI</option>
-                      <option value="RJ">RJ</option>
-                      <option value="RN">RN</option>
-                      <option value="RS">RS</option>
-                      <option value="RO">RO</option>
-                      <option value="RR">RR</option>
-                      <option value="SC">SC</option>
-                      <option value="SP">SP</option>
-                      <option value="SE">SE</option>
-                      <option value="TO">TO</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Resumo do Frete */}
-                {customer.cep.replace(/\D/g, '').length === 8 && (
-                  <div className="bg-emerald-900/20 rounded-lg p-4 border border-emerald-700/50">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-400">Frete</span>
-                      <span className="font-semibold text-emerald-400">GRÁTIS</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Forma de Pagamento */}
-              <div className="space-y-4 pt-4 border-t border-slate-700">
-                <h3 className="font-semibold text-white">Forma de Pagamento</h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['PIX', 'CARD', 'CASH'] as const).map(method => (
-                    <button
-                      key={method}
-                      type="button"
-                      onClick={() => setCustomer({...customer, paymentMethod: method})}
-                      className={`p-3 rounded-lg border text-sm font-medium transition-all ${customer.paymentMethod === method 
-                        ? 'bg-primary border-primary text-white' 
-                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'}`}
-                    >
-                      {method === 'PIX' ? 'Pix' : method === 'CARD' ? 'Cartão' : 'Dinheiro'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </form>
-          )}
-
-          {/* STEP 4: SUCCESS */}
+          {/* STEP 3: SUCCESS */}
           {step === 'SUCCESS' && (
              <div className="h-full flex flex-col items-center justify-center text-center space-y-6 animate-scale-up">
                 <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center text-green-500 mb-2">

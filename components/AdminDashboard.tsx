@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, AppConfig } from '../types';
-import { Plus, Edit2, Trash2, Settings, Palette, Save } from 'lucide-react';
+import { Plus, Edit2, Trash2, Settings, Palette, Save, Tag, CreditCard, BarChart3 } from 'lucide-react';
+import { formatPhone } from '../services/validators';
 
 interface AdminDashboardProps {
   products: Product[];
@@ -8,6 +9,10 @@ interface AdminDashboardProps {
   onEditProduct: (product?: Product) => void;
   onDeleteProduct: (id: string) => void;
   onUpdateConfig: (newConfig: AppConfig) => void;
+  onManageCategories: () => void;
+  onManagePayments: () => void;
+  onViewSales: () => void;
+  successMessage?: string;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -15,11 +20,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   config,
   onEditProduct,
   onDeleteProduct,
-  onUpdateConfig
+  onUpdateConfig,
+  onManageCategories,
+  onManagePayments,
+  onViewSales,
+  successMessage
 }) => {
   const [showConfig, setShowConfig] = useState(false);
   const [tempConfig, setTempConfig] = useState<AppConfig>(config);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
 
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -28,17 +39,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleSaveConfig = () => {
     onUpdateConfig(tempConfig);
     setShowConfig(false);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setTempConfig({...tempConfig, logo_url: reader.result as string});
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
     <div className="space-y-8 animate-fade-in">
+      {/* Alerta de Sucesso */}
+      {(showSuccess || successMessage) && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in">
+          <Save className="w-5 h-5" />
+          <span>{successMessage || 'Configurações salvas com sucesso!'}</span>
+        </div>
+      )}
+
       {/* Header Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-white">Painel Administrativo</h2>
-          <p className="text-slate-400 text-sm">Gerencie seus produtos e aparência da loja.</p>
+          {/*<p className="text-slate-400 text-sm">Gerencie seus produtos e aparência da loja.</p>*/}
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={onViewSales}
+            className="p-2.5 rounded-lg border bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+            title="Dashboard de Vendas"
+          >
+            <BarChart3 className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onManageCategories}
+            className="p-2.5 rounded-lg border bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+            title="Gerenciar Campos"
+          >
+            <Tag className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onManagePayments}
+            className="p-2.5 rounded-lg border bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+            title="Métodos de Pagamento"
+          >
+            <CreditCard className="w-5 h-5" />
+          </button>
           <button
             onClick={() => setShowConfig(!showConfig)}
             className={`p-2.5 rounded-lg border transition-colors ${showConfig ? 'bg-primary border-primary text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}
@@ -76,15 +129,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-400 mb-2">WhatsApp (com DDI e DDD)</label>
+              <label className="block text-sm font-medium text-slate-400 mb-2">Logo da Loja</label>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleLogoUpload}
+                className="hidden"
+              />
+              <div 
+                onClick={() => logoInputRef.current?.click()}
+                className="cursor-pointer border-2 border-dashed border-slate-700 hover:border-primary rounded-lg p-4 transition-colors"
+              >
+                {tempConfig.logo_url ? (
+                  <div className="flex items-center gap-4">
+                    <img src={tempConfig.logo_url} alt="Logo" className="w-16 h-16 object-cover rounded-lg" />
+                    <div className="flex-1">
+                      <p className="text-white text-sm">Logo carregada</p>
+                      <p className="text-slate-400 text-xs">Clique para alterar</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTempConfig({...tempConfig, logo_url: ''});
+                      }}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-slate-400 text-sm">Clique para fazer upload da logo</p>
+                    <p className="text-slate-500 text-xs mt-1">PNG, JPG ou SVG</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-slate-400 mb-2">WhatsApp</label>
               <input
                 type="text"
-                value={tempConfig.whatsappNumber || ''}
-                onChange={(e) => setTempConfig({...tempConfig, whatsappNumber: e.target.value})}
-                placeholder="5511999999999"
+                value={formatPhone(tempConfig.whatsappNumber || '')}
+                onChange={(e) => setTempConfig({...tempConfig, whatsappNumber: e.target.value.replace(/[^\d]/g, '')})}
+                placeholder="+55 (11) 99999-9999"
+                maxLength={19}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
               />
-              <p className="text-xs text-slate-500 mt-1">Exemplo: 5511999999999 (55 = Brasil, 11 = DDD, número)</p>
+              <p className="text-xs text-slate-500 mt-1">Formato: +55 (DDD) 99999-9999</p>
             </div>
             
             <div>

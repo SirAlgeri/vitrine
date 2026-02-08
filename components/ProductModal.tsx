@@ -1,5 +1,5 @@
-import React from 'react';
-import { Product } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Product, FieldDefinition } from '../types';
 import { X, ShoppingCart } from 'lucide-react';
 
 interface ProductModalProps {
@@ -9,15 +9,28 @@ interface ProductModalProps {
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, onAddToCart }) => {
-  if (!product) return null;
+  const [fields, setFields] = useState<FieldDefinition[]>([]);
+
+  useEffect(() => {
+    if (product) loadFields();
+  }, [product]);
 
   // Prevent background scroll
   React.useEffect(() => {
+    if (!product) return;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = 'auto';
     };
-  }, []);
+  }, [product]);
+
+  const loadFields = async () => {
+    const res = await fetch('http://localhost:3001/api/field-definitions');
+    const data = await res.json();
+    setFields(data.filter((f: FieldDefinition) => !f.is_default));
+  };
+
+  if (!product) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -64,6 +77,30 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, on
                 {product.description || "Nenhuma descrição informada."}
               </p>
             </div>
+
+            {/* Custom Fields */}
+            {fields.length > 0 && product.fields && Object.keys(product.fields).length > 0 && (
+              <div className="mt-6 pt-6 border-t border-slate-800">
+                <h3 className="text-sm uppercase tracking-wider text-slate-500 font-bold mb-3">Especificações</h3>
+                <dl className="space-y-2">
+                  {fields.map(field => {
+                    const value = product.fields?.[field.id];
+                    if (!value) return null;
+                    return (
+                      <div key={field.id} className="flex justify-between">
+                        <dt className="text-slate-400">{field.field_name}:</dt>
+                        <dd className="text-white font-medium">
+                          {field.field_type === 'currency' 
+                            ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value))
+                            : value
+                          }
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </div>
+            )}
           </div>
 
           <div className="mt-8 pt-6 border-t border-slate-800">

@@ -1,0 +1,11 @@
+-- Adicionar CPF à tabela customers
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS cpf VARCHAR(14);
+
+-- Adicionar campos de endereço à tabela customers
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS cep VARCHAR(9);
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS endereco TEXT;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS numero VARCHAR(20);
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS complemento TEXT;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS bairro VARCHAR(100);
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS cidade VARCHAR(100);
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS estado VARCHAR(2);

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Product } from '../types';
+import { Product, FieldDefinition } from '../types';
 import { StorageService } from '../services/storageService';
 import { Camera, Image as ImageIcon, X, ChevronLeft, Save, UploadCloud } from 'lucide-react';
 
@@ -16,15 +16,24 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
     description: '',
     id: '',
     image: '',
+    fields: {}
   });
+  const [fields, setFields] = useState<FieldDefinition[]>([]);
   const [isProcessingImg, setIsProcessingImg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    loadFields();
     if (initialProduct) {
       setFormData(initialProduct);
     }
   }, [initialProduct]);
+
+  const loadFields = async () => {
+    const res = await fetch('http://localhost:3001/api/field-definitions');
+    const data = await res.json();
+    setFields(data.filter((f: FieldDefinition) => !f.is_default));
+  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,12 +58,13 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
     }
 
     const productToSave: Product = {
-      id: formData.id || crypto.randomUUID(), // Standard UUID
+      id: formData.id || crypto.randomUUID(),
       name: formData.name,
       price: Number(formData.price),
       description: formData.description || '',
       image: formData.image || '',
-      createdAt: initialProduct?.createdAt || Date.now()
+      createdAt: initialProduct?.createdAt || Date.now(),
+      fields: formData.fields || {}
     };
 
     onSave(productToSave);
@@ -62,13 +72,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
 
   return (
     <div className="max-w-2xl mx-auto animate-fade-in pb-20">
-      <div className="flex items-center gap-4 mb-6">
-        <button 
-          onClick={onCancel}
-          className="p-2 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
-        >
-          <ChevronLeft className="w-6 h-6" />
-        </button>
+      <div className="mb-6">
         <h2 className="text-2xl font-bold text-white">
           {initialProduct ? 'Editar Produto' : 'Novo Produto'}
         </h2>
@@ -170,6 +174,68 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all resize-none"
             />
         </div>
+
+        {/* Custom Fields */}
+        {fields.length > 0 && (
+          <div className="space-y-4 pt-4 border-t border-slate-700">
+            <h3 className="text-lg font-semibold text-white">Campos Adicionais</h3>
+            {fields.map(field => (
+              <div key={field.id} className="space-y-2">
+                <label className="block text-sm font-medium text-slate-400">{field.field_name}</label>
+                {field.field_type === 'text' && (
+                  <input
+                    type="text"
+                    value={formData.fields?.[field.id] || ''}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      fields: { ...formData.fields, [field.id]: e.target.value }
+                    })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                  />
+                )}
+                {field.field_type === 'number' && (
+                  <input
+                    type="number"
+                    value={formData.fields?.[field.id] || ''}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      fields: { ...formData.fields, [field.id]: e.target.value }
+                    })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                  />
+                )}
+                {field.field_type === 'currency' && (
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.fields?.[field.id] || ''}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      fields: { ...formData.fields, [field.id]: e.target.value }
+                    })}
+                    placeholder="0.00"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                  />
+                )}
+                {field.field_type === 'select' && field.options && (
+                  <select
+                    value={formData.fields?.[field.id] || ''}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      fields: { ...formData.fields, [field.id]: e.target.value }
+                    })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
+                  >
+                    <option value="">Selecione...</option>
+                    {JSON.parse(field.options).map((option: string) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Sticky Action Bar for Mobile */}
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-slate-900/90 backdrop-blur border-t border-slate-800 md:relative md:bg-transparent md:border-0 md:p-0 flex items-center gap-4 z-50">

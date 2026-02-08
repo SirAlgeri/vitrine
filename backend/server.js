@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { pool } from './db.js';
 import bcrypt from 'bcrypt';
 
@@ -29,10 +30,53 @@ app.get('/api/config', async (req, res) => {
 
 app.put('/api/config', async (req, res) => {
   try {
-    const { store_name, primary_color, secondary_color, whatsapp_number } = req.body;
+    const { store_name, primary_color, secondary_color, whatsapp_number, logo_url, enable_online_checkout, enable_whatsapp_checkout, payment_methods } = req.body;
+    
+    // Construir query dinamicamente baseado nos campos enviados
+    const updates = [];
+    const values = [];
+    let paramCount = 1;
+    
+    if (store_name !== undefined) {
+      updates.push(`store_name = $${paramCount++}`);
+      values.push(store_name);
+    }
+    if (primary_color !== undefined) {
+      updates.push(`primary_color = $${paramCount++}`);
+      values.push(primary_color);
+    }
+    if (secondary_color !== undefined) {
+      updates.push(`secondary_color = $${paramCount++}`);
+      values.push(secondary_color);
+    }
+    if (whatsapp_number !== undefined) {
+      updates.push(`whatsapp_number = $${paramCount++}`);
+      values.push(whatsapp_number);
+    }
+    if (logo_url !== undefined) {
+      updates.push(`logo_url = $${paramCount++}`);
+      values.push(logo_url);
+    }
+    if (enable_online_checkout !== undefined) {
+      updates.push(`enable_online_checkout = $${paramCount++}`);
+      values.push(enable_online_checkout);
+    }
+    if (enable_whatsapp_checkout !== undefined) {
+      updates.push(`enable_whatsapp_checkout = $${paramCount++}`);
+      values.push(enable_whatsapp_checkout);
+    }
+    if (payment_methods !== undefined) {
+      updates.push(`payment_methods = $${paramCount++}`);
+      values.push(JSON.stringify(payment_methods));
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo para atualizar' });
+    }
+    
     const result = await pool.query(
-      'UPDATE config SET store_name = $1, primary_color = $2, secondary_color = $3, whatsapp_number = $4 WHERE id = 1 RETURNING *',
-      [store_name, primary_color, secondary_color, whatsapp_number]
+      `UPDATE config SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = 1 RETURNING *`,
+      values
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -44,7 +88,9 @@ app.put('/api/config', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    // Accept both username and email (for backwards compatibility)
+    const emailOrUsername = username;
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [emailOrUsername]);
     
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
@@ -63,54 +109,355 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// ========== PRODUCTS ==========
-app.get('/api/products', async (req, res) => {
+// ========== CUSTOMER AUTH ==========
+app.post('/api/customers/register', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
+    const { nome_completo, email, senha, telefone, aceita_marketing } = req.body;
+    
+    const existing = await pool.query('SELECT id FROM customers WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Email já cadastrado' });
+    }
+    
+    const id = crypto.randomUUID();
+    const senha_hash = await bcrypt.hash(senha, 10);
+    
+    const result = await pool.query(
+      `INSERT INTO customers (id, nome_completo, email, senha_hash, telefone, aceita_marketing)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome_completo, email, telefone, aceita_marketing, status, criado_em`,
+      [id, nome_completo, email, senha_hash, telefone, aceita_marketing || false]
+    );
+    
+    res.status(201).json({ customer: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/customers/login', async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    
+    const result = await pool.query('SELECT * FROM customers WHERE email = $1 AND deletado_em IS NULL', [email]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Email ou senha inválidos' });
+    }
+    
+    const customer = result.rows[0];
+    
+    if (customer.status === 'bloqueado') {
+      return res.status(403).json({ error: 'Conta bloqueada. Entre em contato com o suporte.' });
+    }
+    
+    if (customer.status === 'inativo') {
+      return res.status(403).json({ error: 'Conta inativa' });
+    }
+    
+    const valid = await bcrypt.compare(senha, customer.senha_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Email ou senha inválidos' });
+    }
+    
+    // Update last login
+    await pool.query('UPDATE customers SET ultimo_login_em = CURRENT_TIMESTAMP WHERE id = $1', [customer.id]);
+    
+    delete customer.senha_hash;
+    res.json({ customer });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/customers/me/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, status, criado_em, ultimo_login_em FROM customers WHERE id = $1 AND deletado_em IS NULL',
+      [req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/customers/:id', async (req, res) => {
+  try {
+    const { nome_completo, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE customers SET nome_completo = $1, telefone = $2, cpf = $3, cep = $4, endereco = $5, numero = $6, complemento = $7, bairro = $8, cidade = $9, estado = $10, aceita_marketing = $11
+       WHERE id = $12 AND deletado_em IS NULL
+       RETURNING id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, status, criado_em, ultimo_login_em`,
+      [nome_completo, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, req.params.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/customers/:id/password', async (req, res) => {
+  try {
+    const { senha_atual, senha_nova } = req.body;
+    
+    const result = await pool.query('SELECT senha_hash FROM customers WHERE id = $1 AND deletado_em IS NULL', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+    
+    const valid = await bcrypt.compare(senha_atual, result.rows[0].senha_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Senha atual incorreta' });
+    }
+    
+    const senha_hash = await bcrypt.hash(senha_nova, 10);
+    await pool.query('UPDATE customers SET senha_hash = $1 WHERE id = $2', [senha_hash, req.params.id]);
+    
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/customers/:id', async (req, res) => {
+  try {
+    await pool.query('UPDATE customers SET deletado_em = CURRENT_TIMESTAMP, status = $1 WHERE id = $2', ['inativo', req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/customers/:id/orders', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM orders WHERE customer_id = $1 ORDER BY created_at DESC',
+      [req.params.id]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/products/:id', async (req, res) => {
+// ========== CUSTOMER ADDRESSES ==========
+app.get('/api/customers/:id/addresses', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    const result = await pool.query(
+      'SELECT * FROM customer_addresses WHERE customer_id = $1 ORDER BY is_default DESC, criado_em DESC',
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/customers/:id/addresses', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const { nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default } = req.body;
+    const id = crypto.randomUUID();
+    
+    // If setting as default, unset other defaults
+    if (is_default) {
+      await client.query(
+        'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1',
+        [req.params.id]
+      );
+    }
+    
+    const result = await client.query(
+      `INSERT INTO customer_addresses (id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [id, req.params.id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default || false]
+    );
+    
+    await client.query('COMMIT');
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.put('/api/addresses/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const { nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, customer_id } = req.body;
+    
+    if (is_default && customer_id) {
+      await client.query(
+        'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1',
+        [customer_id]
+      );
+    }
+    
+    const result = await client.query(
+      `UPDATE customer_addresses SET nome_endereco = $1, cep = $2, rua = $3, numero = $4, complemento = $5, bairro = $6, cidade = $7, estado = $8, is_default = $9
+       WHERE id = $10 RETURNING *`,
+      [nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, req.params.id]
+    );
+    
+    await client.query('COMMIT');
+    res.json(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.delete('/api/addresses/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM customer_addresses WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== PRODUCTS ==========
+app.get('/api/products', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const productsResult = await client.query('SELECT * FROM products ORDER BY created_at DESC');
+    const products = productsResult.rows;
+    
+    // Load custom fields for each product
+    for (const product of products) {
+      const fieldsResult = await client.query(
+        'SELECT field_id, value FROM product_fields WHERE product_id = $1',
+        [product.id]
+      );
+      product.fields = {};
+      fieldsResult.rows.forEach(row => {
+        product.fields[row.field_id] = row.value;
+      });
+    }
+    
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/products/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const result = await client.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
-    res.json(result.rows[0]);
+    
+    const product = result.rows[0];
+    const fieldsResult = await client.query(
+      'SELECT field_id, value FROM product_fields WHERE product_id = $1',
+      [product.id]
+    );
+    product.fields = {};
+    fieldsResult.rows.forEach(row => {
+      product.fields[row.field_id] = row.value;
+    });
+    
+    res.json(product);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
 app.post('/api/products', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { id, name, price, description, image } = req.body;
-    const result = await pool.query(
+    await client.query('BEGIN');
+    
+    const { id, name, price, description, image, fields } = req.body;
+    const result = await client.query(
       'INSERT INTO products (id, name, price, description, image) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [id, name, price, description, image]
     );
+    
+    // Save custom fields
+    if (fields) {
+      for (const [fieldId, value] of Object.entries(fields)) {
+        if (value) {
+          await client.query(
+            'INSERT INTO product_fields (product_id, field_id, value) VALUES ($1, $2, $3)',
+            [id, fieldId, value]
+          );
+        }
+      }
+    }
+    
+    await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
 app.put('/api/products/:id', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { name, price, description, image } = req.body;
-    const result = await pool.query(
+    await client.query('BEGIN');
+    
+    const { name, price, description, image, fields } = req.body;
+    const result = await client.query(
       'UPDATE products SET name = $1, price = $2, description = $3, image = $4 WHERE id = $5 RETURNING *',
       [name, price, description, image, req.params.id]
     );
+    
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
+    
+    // Delete old custom fields
+    await client.query('DELETE FROM product_fields WHERE product_id = $1', [req.params.id]);
+    
+    // Save new custom fields
+    if (fields) {
+      for (const [fieldId, value] of Object.entries(fields)) {
+        if (value) {
+          await client.query(
+            'INSERT INTO product_fields (product_id, field_id, value) VALUES ($1, $2, $3)',
+            [req.params.id, fieldId, value]
+          );
+        }
+      }
+    }
+    
+    await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -126,17 +473,71 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
+// ========== FIELD DEFINITIONS ==========
+app.get('/api/field-definitions', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM field_definitions ORDER BY field_order');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/field-definitions', async (req, res) => {
+  try {
+    const { id, field_name, field_type, field_order, options } = req.body;
+    const result = await pool.query(
+      'INSERT INTO field_definitions (id, field_name, field_type, is_default, can_delete, field_order, options) VALUES ($1, $2, $3, false, true, $4, $5) RETURNING *',
+      [id, field_name, field_type, field_order || 0, options]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/field-definitions/:id', async (req, res) => {
+  try {
+    const { field_name, field_type } = req.body;
+    const result = await pool.query(
+      'UPDATE field_definitions SET field_name = $1, field_type = $2 WHERE id = $3 AND can_delete = true RETURNING *',
+      [field_name, field_type, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Campo não pode ser editado' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/field-definitions/:id', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM field_definitions WHERE id = $1 AND can_delete = true RETURNING *',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Campo não pode ser deletado' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ========== ORDERS ==========
 app.post('/api/orders', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
-    const { customer_name, customer_phone, customer_address, payment_method, total, items } = req.body;
+    const { customer_id, customer_name, customer_phone, customer_address, payment_method, total, items } = req.body;
     
     const orderResult = await client.query(
-      'INSERT INTO orders (customer_name, customer_phone, customer_address, payment_method, total) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [customer_name, customer_phone, customer_address, payment_method, total]
+      'INSERT INTO orders (customer_id, customer_name, customer_phone, customer_address, payment_method, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [customer_id, customer_name, customer_phone, customer_address, payment_method, total]
     );
     
     const order = orderResult.rows[0];
@@ -161,6 +562,33 @@ app.post('/api/orders', async (req, res) => {
 app.get('/api/orders', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/orders/:id', async (req, res) => {
+  try {
+    const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+    const order = orderResult.rows[0];
+    const itemsResult = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [req.params.id]);
+    order.items = itemsResult.rows;
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/orders/customer/:customerId', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT o.*, json_agg(json_build_object(\'product_name\', oi.product_name, \'quantity\', oi.quantity, \'subtotal\', oi.subtotal)) as items FROM orders o LEFT JOIN order_items oi ON o.id = oi.order_id WHERE o.customer_id = $1 GROUP BY o.id ORDER BY o.created_at DESC',
+      [req.params.customerId]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
