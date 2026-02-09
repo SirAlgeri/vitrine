@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Customer, CartItem, AppConfig } from '../types';
 import { ShoppingBag, Check } from 'lucide-react';
 import { validateCPF, formatCPF, formatCEP, fetchAddressByCEP } from '../services/validators';
+import PaymentForm from '../components/PaymentForm';
 
 interface CheckoutPageProps {
   customer: Customer | null;
@@ -26,6 +27,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
   const [currentStep, setCurrentStep] = useState<Step>('identification');
   const [saving, setSaving] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [paymentData, setPaymentData] = useState<any>(null);
   const [formData, setFormData] = useState({
     cpf: '',
     cep: '',
@@ -146,11 +148,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
         setSaving(false);
       }
     } else if (currentStep === 'payment') {
-      setCurrentStep('review');
+      // Payment handled by PaymentForm component
+      return;
     } else if (currentStep === 'review') {
       setSaving(true);
       try {
         const address = `${formData.endereco}, ${formData.numero}${formData.complemento ? ', ' + formData.complemento : ''} - ${formData.bairro}, ${formData.cidade}/${formData.estado} - CEP: ${formData.cep}`;
+        
+        let paymentMethod = 'PIX';
+        if (paymentData) {
+          if (paymentData.payment_method_id === 'pix') {
+            paymentMethod = 'PIX';
+          } else if (paymentData.payment_method_id) {
+            paymentMethod = 'CARD';
+          }
+        }
+        
         const response = await fetch('http://localhost:3001/api/orders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -159,7 +172,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
             customer_name: customer!.nome_completo,
             customer_phone: customer!.telefone,
             customer_address: address,
-            payment_method: 'PIX',
+            payment_method: paymentMethod,
+            payment_id: paymentData?.id || null,
+            payment_provider_status: paymentData?.status || null,
             total: cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
             items: cart
           })
@@ -167,7 +182,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
         const order = await response.json();
         setOrderId(order.id);
         onClearCart();
-        setCurrentStep('confirmation');
+        navigate(`/pedido/${order.id}`);
       } catch (err) {
         console.error(err);
         alert('Erro ao criar pedido');
@@ -381,15 +396,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       {currentStep === 'payment' && (
         <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
           <h2 className="text-2xl font-bold text-white mb-6">Forma de Pagamento</h2>
-          <p className="text-slate-400 mb-6">Selecione a forma de pagamento (em desenvolvimento)</p>
-          <div className="flex gap-3">
-            <button onClick={() => setCurrentStep('address')} className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors">
-              Voltar
-            </button>
-            <button onClick={handleNext} className="flex-1 px-6 py-3 bg-primary hover:bg-blue-600 text-white rounded-lg font-medium transition-colors">
-              Continuar
-            </button>
-          </div>
+          <PaymentForm
+            amount={total}
+            customerData={{
+              email: customer.email,
+              cpf: formData.cpf,
+              name: customer.nome_completo
+            }}
+            onSuccess={(data) => {
+              setPaymentData(data);
+              setCurrentStep('review');
+            }}
+            onError={(error) => {
+              alert(error);
+            }}
+          />
+          <button 
+            onClick={() => setCurrentStep('address')} 
+            className="w-full mt-4 px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+          >
+            Voltar
+          </button>
         </div>
       )}
 
@@ -406,9 +433,91 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
             <div>
               <h3 className="font-semibold text-white mb-2">Endereço</h3>
               <p className="text-slate-300">{formData.endereco}, {formData.numero}</p>
+              {formData.complemento && <p className="text-slate-300">{formData.complemento}</p>}
               <p className="text-slate-300">{formData.bairro} - {formData.cidade}/{formData.estado}</p>
               <p className="text-slate-300">CEP: {formData.cep}</p>
             </div>
+            
+            {/* Payment Info */}
+            {paymentData && (
+              <div>
+                <h3 className="font-semibold text-white mb-2">Pagamento</h3>
+                {paymentData.payment_method_id === 'pix' ? (
+                  <div className="bg-slate-700 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                      <span className="text-yellow-400 font-medium">PIX - Aguardando Pagamento</span>
+                    </div>
+                    <div className="bg-white p-3 rounded-lg">
+                      <img 
+                        src={`data:image/png;base64,${paymentData.point_of_interaction?.transaction_data?.qr_code_base64}`} 
+                        alt="QR Code PIX" 
+                        className="w-48 h-48 mx-auto"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-slate-400 text-sm mb-1">Código PIX:</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={paymentData.point_of_interaction?.transaction_data?.qr_code || ''}
+                          readOnly
+                          className="flex-1 bg-slate-600 text-white text-xs p-2 rounded border border-slate-500"
+                        />
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(paymentData.point_of_interaction?.transaction_data?.qr_code || '');
+                            alert('Código copiado!');
+                          }}
+                          className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-slate-400 text-xs">Escaneie o QR Code ou copie o código para pagar no app do seu banco</p>
+                  </div>
+                ) : (
+                  <div className="bg-slate-700 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      {paymentData.status === 'approved' ? (
+                        <>
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-green-400 font-medium">Cartão de Crédito - Aprovado</span>
+                        </>
+                      ) : paymentData.status === 'pending' ? (
+                        <>
+                          <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                          <span className="text-yellow-400 font-medium">Cartão de Crédito - Pendente</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                          <span className="text-red-400 font-medium">Cartão de Crédito - Recusado</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between text-slate-300">
+                        <span>ID da Transação:</span>
+                        <span className="font-mono text-slate-400">{paymentData.id}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-300">
+                        <span>Status:</span>
+                        <span className="font-medium text-white">{paymentData.status_detail}</span>
+                      </div>
+                      {paymentData.installments > 1 && (
+                        <div className="flex justify-between text-slate-300">
+                          <span>Parcelas:</span>
+                          <span className="font-medium text-white">{paymentData.installments}x</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div>
               <h3 className="font-semibold text-white mb-2">Produtos</h3>
               <div className="space-y-3">

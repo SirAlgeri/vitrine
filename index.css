@@ -14,3 +14,53 @@ body {
   background-color: #0f172a;
   color: #f1f5f9;
 }
+
+/* Mercado Pago SDK Styles */
+#form-checkout__cardNumber,
+#form-checkout__expirationDate,
+#form-checkout__securityCode {
+  border: 1px solid #475569;
+  background-color: #334155;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  height: 48px;
+}
+
+#form-checkout__cardNumber iframe,
+#form-checkout__expirationDate iframe,
+#form-checkout__securityCode iframe {
+  height: 100% !important;
+  background-color: transparent !important;
+}
+
+/* Credit Card 3D Animation */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}

@@ -4,8 +4,20 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { pool } from './db.js';
 import bcrypt from 'bcrypt';
+import { MercadoPagoConfig, Payment, Preference } from 'mercadopago';
+import { 
+  PaymentStatus, 
+  OrderStatus, 
+  mapMercadoPagoStatus, 
+  updateOrderStatus,
+  updateOrderStatusManual 
+} from './statusManager.js';
 
 dotenv.config();
+
+const mercadopago = new MercadoPagoConfig({ 
+  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN 
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -163,6 +175,35 @@ app.post('/api/customers/login', async (req, res) => {
     
     delete customer.senha_hash;
     res.json({ customer });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== CUSTOMERS ==========
+app.get('/api/customers', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado FROM customers WHERE deletado_em IS NULL ORDER BY nome_completo'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/customers', async (req, res) => {
+  try {
+    const { nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado } = req.body;
+    
+    const result = await pool.query(
+      `INSERT INTO customers (id, nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado, status, senha_hash)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ativo', '')
+       RETURNING id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado`,
+      [nome_completo, telefone || '', cpf || null, email || null, cep || null, endereco || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null]
+    );
+    
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -533,21 +574,43 @@ app.post('/api/orders', async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    const { customer_id, customer_name, customer_phone, customer_address, payment_method, total, items } = req.body;
+    const { customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_provider_status, payment_status: customPaymentStatus, order_status: customOrderStatus, total, items, created_at } = req.body;
+    
+    // Se vier com status customizado (registro manual), usar ele. Senão, mapear do gateway
+    let payment_status, order_status;
+    if (customPaymentStatus && customOrderStatus) {
+      // Registro manual - usar status enviados
+      payment_status = customPaymentStatus;
+      order_status = customOrderStatus;
+    } else {
+      // Checkout normal - mapear do gateway
+      payment_status = payment_provider_status ? mapMercadoPagoStatus(payment_provider_status) : PaymentStatus.PENDING;
+      order_status = payment_status === PaymentStatus.APPROVED ? OrderStatus.PAID : OrderStatus.PENDING_PAYMENT;
+    }
     
     const orderResult = await client.query(
-      'INSERT INTO orders (customer_id, customer_name, customer_phone, customer_address, payment_method, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [customer_id, customer_name, customer_phone, customer_address, payment_method, total]
+      `INSERT INTO orders 
+       (customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at || new Date()]
     );
     
     const order = orderResult.rows[0];
     
     for (const item of items) {
       await client.query(
-        'INSERT INTO order_items (order_id, product_id, product_name, product_price, quantity, subtotal) VALUES ($1, $2, $3, $4, $5, $6)',
-        [order.id, item.id, item.name, item.price, item.quantity, item.price * item.quantity]
+        'INSERT INTO order_items (order_id, product_id, product_name, product_price, product_image, quantity, subtotal) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        [order.id, item.product_id || item.id, item.product_name || item.name, item.product_price || item.price, item.product_image || item.image, item.quantity, item.subtotal || (item.price * item.quantity)]
       );
     }
+    
+    // Registrar histórico inicial
+    await client.query(
+      `INSERT INTO order_status_history 
+       (order_id, new_payment_status, new_order_status, changed_by, notes)
+       VALUES ($1, $2, $3, 'system', 'Pedido criado')`,
+      [order.id, payment_status, order_status]
+    );
     
     await client.query('COMMIT');
     res.status(201).json(order);
@@ -591,6 +654,160 @@ app.get('/api/orders/customer/:customerId', async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== MERCADO PAGO ==========
+app.get('/api/mercadopago/public-key', (req, res) => {
+  res.json({ publicKey: process.env.MERCADOPAGO_PUBLIC_KEY });
+});
+
+app.post('/api/mercadopago/process-payment', async (req, res) => {
+  try {
+    const payment = new Payment(mercadopago);
+    const body = {
+      transaction_amount: Number(req.body.transaction_amount),
+      token: req.body.token,
+      description: req.body.description,
+      installments: Number(req.body.installments),
+      payment_method_id: req.body.payment_method_id,
+      issuer_id: String(req.body.issuer_id),
+      payer: {
+        email: req.body.payer?.email,
+        identification: {
+          type: 'CPF',
+          number: req.body.payer?.identification?.number?.replace(/\D/g, '')
+        }
+      }
+    };
+    
+    const result = await payment.create({ body });
+    
+    // Mapear status do MP para status interno
+    const paymentStatus = mapMercadoPagoStatus(result.status);
+    
+    res.json({
+      ...result,
+      internal_payment_status: paymentStatus
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, details: err.cause });
+  }
+});
+
+app.post('/api/mercadopago/create-pix', async (req, res) => {
+  try {
+    const payment = new Payment(mercadopago);
+    const body = {
+      transaction_amount: req.body.transaction_amount,
+      description: req.body.description,
+      payment_method_id: 'pix',
+      payer: {
+        email: req.body.payer.email,
+        first_name: req.body.payer.first_name,
+        last_name: req.body.payer.last_name,
+        identification: {
+          type: 'CPF',
+          number: req.body.payer.identification.number
+        }
+      }
+    };
+    const result = await payment.create({ body });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/mercadopago/create-boleto', async (req, res) => {
+  try {
+    const payment = new Payment(mercadopago);
+    const body = {
+      transaction_amount: req.body.transaction_amount,
+      description: req.body.description,
+      payment_method_id: 'bolbradesco',
+      payer: {
+        email: req.body.payer.email,
+        first_name: req.body.payer.first_name,
+        last_name: req.body.payer.last_name,
+        identification: {
+          type: req.body.payer.identification.type,
+          number: req.body.payer.identification.number
+        }
+      }
+    };
+    const result = await payment.create({ body });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== STATUS MANAGEMENT ==========
+
+// Atualizar status do pedido (admin)
+app.put('/api/orders/:id/status', async (req, res) => {
+  try {
+    const { order_status, tracking_code, delivery_deadline, notes } = req.body;
+    
+    // Atualizar status
+    const result = await updateOrderStatusManual(pool, req.params.id, order_status, 'admin', notes);
+    
+    // Atualizar rastreio se fornecido
+    if (tracking_code || delivery_deadline) {
+      await pool.query(
+        'UPDATE orders SET tracking_code = $1, delivery_deadline = $2 WHERE id = $3',
+        [tracking_code || null, delivery_deadline || null, req.params.id]
+      );
+    }
+    
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Buscar histórico de status
+app.get('/api/orders/:id/history', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM order_status_history WHERE order_id = $1 ORDER BY created_at DESC',
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Webhook do Mercado Pago
+app.post('/api/webhooks/mercadopago', async (req, res) => {
+  try {
+    const { type, data } = req.body;
+    
+    if (type === 'payment') {
+      const paymentId = data.id;
+      
+      // Buscar detalhes do pagamento
+      const payment = new Payment(mercadopago);
+      const paymentData = await payment.get({ id: paymentId });
+      
+      // Buscar pedido pelo payment_id
+      const orderResult = await pool.query(
+        'SELECT id FROM orders WHERE payment_id = $1',
+        [String(paymentId)]
+      );
+      
+      if (orderResult.rows.length > 0) {
+        const orderId = orderResult.rows[0].id;
+        await updateOrderStatus(pool, orderId, paymentData.status, 'webhook', `Webhook do Mercado Pago: ${paymentData.status_detail}`);
+      }
+    }
+    
+    res.status(200).send('OK');
+  } catch (err) {
+    console.error('Webhook error:', err);
     res.status(500).json({ error: err.message });
   }
 });

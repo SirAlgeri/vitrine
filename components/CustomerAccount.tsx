@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, User, MapPin, Lock, Package, Trash2, Check } from 'lucide-react';
 import { Customer } from '../types';
 import { customerAuth } from '../services/customerAuth';
+import { OrderStatus, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../shared/constants/status';
+import { StatusBadge } from './StatusComponents';
 
 interface CustomerAccountProps {
   customer: Customer;
@@ -165,7 +167,7 @@ export const CustomerAccount: React.FC<CustomerAccountProps> = ({ customer: init
               Endereço
             </h3>
             <div className="space-y-2 text-slate-300">
-              <p>{customer.rua}, {customer.numero}</p>
+              <p>{customer.endereco}, {customer.numero}</p>
               {customer.complemento && <p>{customer.complemento}</p>}
               <p>{customer.bairro}</p>
               <p>{customer.cidade} - {customer.estado}</p>
@@ -227,14 +229,12 @@ export const CustomerAccount: React.FC<CustomerAccountProps> = ({ customer: init
             )}
           </div>
 
-          <div className="bg-slate-800 rounded-lg p-6 border border-red-500/50">
-            <h3 className="text-lg font-semibold text-red-400 flex items-center gap-2 mb-2">
-              <Trash2 className="w-5 h-5" />
-              Zona de Perigo
-            </h3>
-            <p className="text-slate-400 text-sm mb-4">Excluir sua conta permanentemente</p>
-            <button onClick={handleDeleteAccount} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg">
-              Excluir Conta
+          <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
+            <button 
+              onClick={handleDeleteAccount} 
+              className="text-xs text-red-400 hover:text-red-300 transition-colors"
+            >
+              Excluir conta
             </button>
           </div>
         </div>
@@ -266,22 +266,13 @@ export const CustomerAccount: React.FC<CustomerAccountProps> = ({ customer: init
                         })}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right space-y-2">
                       <p className="text-white font-bold">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total)}
                       </p>
-                      <span className={`text-xs px-2 py-1 rounded ${
-                        order.status === 'PENDING' ? 'bg-yellow-900/50 text-yellow-300' :
-                        order.status === 'CONFIRMED' ? 'bg-blue-900/50 text-blue-300' :
-                        order.status === 'SHIPPED' ? 'bg-purple-900/50 text-purple-300' :
-                        order.status === 'DELIVERED' ? 'bg-green-900/50 text-green-300' :
-                        'bg-red-900/50 text-red-300'
-                      }`}>
-                        {order.status === 'PENDING' ? 'Pendente' :
-                         order.status === 'CONFIRMED' ? 'Confirmado' :
-                         order.status === 'SHIPPED' ? 'Enviado' :
-                         order.status === 'DELIVERED' ? 'Entregue' : 'Cancelado'}
-                      </span>
+                      <div className="flex justify-end">
+                        <StatusBadge status={order.order_status as OrderStatus} type="order" />
+                      </div>
                     </div>
                   </div>
                   {order.items && (

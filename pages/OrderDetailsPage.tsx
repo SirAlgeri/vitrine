@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Package, ArrowLeft } from 'lucide-react';
+import { Package, ArrowLeft, Clock } from 'lucide-react';
+import { StatusBadge, OrderTimeline } from '../components/StatusComponents';
+import { PaymentStatus, OrderStatus } from '../shared/constants/status';
 
 export const OrderDetailsPage: React.FC = () => {
   const { orderId } = useParams();
@@ -55,27 +57,32 @@ export const OrderDetailsPage: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
           <div className="bg-slate-700 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-slate-400 mb-2">Status</h3>
-            <span className={`inline-block px-3 py-1 rounded text-sm font-medium ${
-              order.status === 'PENDING' ? 'bg-yellow-900/50 text-yellow-300' :
-              order.status === 'CONFIRMED' ? 'bg-blue-900/50 text-blue-300' :
-              order.status === 'SHIPPED' ? 'bg-purple-900/50 text-purple-300' :
-              order.status === 'DELIVERED' ? 'bg-green-900/50 text-green-300' :
-              'bg-red-900/50 text-red-300'
-            }`}>
-              {order.status === 'PENDING' ? 'Pendente' :
-               order.status === 'CONFIRMED' ? 'Confirmado' :
-               order.status === 'SHIPPED' ? 'Enviado' :
-               order.status === 'DELIVERED' ? 'Entregue' : 'Cancelado'}
-            </span>
+            <h3 className="text-sm font-medium text-slate-400 mb-2">Status do Pedido</h3>
+            <StatusBadge status={order.order_status as OrderStatus} type="order" />
           </div>
 
           <div className="bg-slate-700 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-slate-400 mb-2">Total</h3>
-            <p className="text-2xl font-bold text-white">
-              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total)}
-            </p>
+            <h3 className="text-sm font-medium text-slate-400 mb-2">Status do Pagamento</h3>
+            <StatusBadge status={order.payment_status as PaymentStatus} type="payment" />
           </div>
+        </div>
+
+        <div className="bg-slate-700 rounded-lg p-4 mb-6">
+          <h3 className="text-sm font-medium text-slate-400 mb-4">Acompanhamento do Pedido</h3>
+          <OrderTimeline 
+            orderStatus={order.order_status as OrderStatus} 
+            paymentStatus={order.payment_status as PaymentStatus}
+          />
+        </div>
+
+        <div className="bg-slate-700 rounded-lg p-4 mb-6">
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Total</h3>
+          <p className="text-2xl font-bold text-white">
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total)}
+          </p>
+          {order.payment_id && (
+            <p className="text-slate-400 text-xs mt-2">ID Pagamento: {order.payment_id}</p>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -98,8 +105,15 @@ export const OrderDetailsPage: React.FC = () => {
             <h3 className="text-lg font-semibold text-white mb-3">Produtos</h3>
             <div className="bg-slate-700 rounded-lg p-4 space-y-3">
               {order.items && order.items.map((item: any, idx: number) => (
-                <div key={idx} className="flex justify-between items-center pb-3 border-b border-slate-600 last:border-0 last:pb-0">
-                  <div>
+                <div key={idx} className="flex gap-3 items-center pb-3 border-b border-slate-600 last:border-0 last:pb-0">
+                  {item.product_image && (
+                    <img 
+                      src={item.product_image} 
+                      alt={item.product_name} 
+                      className="w-16 h-16 object-cover rounded-lg"
+                    />
+                  )}
+                  <div className="flex-1">
                     <p className="text-white font-medium">{item.product_name}</p>
                     <p className="text-slate-400 text-sm">Quantidade: {item.quantity}</p>
                   </div>

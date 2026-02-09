@@ -1,18 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, TrendingUp, ShoppingBag, DollarSign, Package, MessageCircle, Eye, Filter } from 'lucide-react';
+import { ChevronLeft, TrendingUp, ShoppingBag, DollarSign, Package, MessageCircle, Eye, Filter, Plus } from 'lucide-react';
+import { OrderStatus, ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../shared/constants/status';
+import { ManualOrderForm } from './ManualOrderForm';
+import { AdminOrderDetails } from './AdminOrderDetails';
 
 interface SalesDashboardProps {
   onBack: () => void;
 }
 
 type Period = 'today' | '7days' | '30days' | 'custom';
-type OrderStatus = 'PENDING' | 'CONFIRMED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'all';
+type StatusFilter = OrderStatus | 'all';
 
 export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
   const [orders, setOrders] = useState<any[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
   const [period, setPeriod] = useState<Period>('30days');
-  const [statusFilter, setStatusFilter] = useState<OrderStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [customDates, setCustomDates] = useState({ start: '', end: '' });
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -43,26 +46,32 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
     // Filtro de período
     const now = new Date();
     if (period === 'today') {
+      const startOfDay = new Date(now.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(now.setHours(23, 59, 59, 999));
       filtered = filtered.filter(o => {
         const orderDate = new Date(o.created_at);
-        return orderDate.toDateString() === now.toDateString();
+        return orderDate >= startOfDay && orderDate <= endOfDay;
       });
     } else if (period === '7days') {
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      weekAgo.setHours(0, 0, 0, 0);
       filtered = filtered.filter(o => new Date(o.created_at) >= weekAgo);
     } else if (period === '30days') {
       const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      monthAgo.setHours(0, 0, 0, 0);
       filtered = filtered.filter(o => new Date(o.created_at) >= monthAgo);
     } else if (period === 'custom' && customDates.start && customDates.end) {
+      const startDate = new Date(customDates.start + 'T00:00:00');
+      const endDate = new Date(customDates.end + 'T23:59:59');
       filtered = filtered.filter(o => {
         const orderDate = new Date(o.created_at);
-        return orderDate >= new Date(customDates.start) && orderDate <= new Date(customDates.end);
+        return orderDate >= startDate && orderDate <= endDate;
       });
     }
 
     // Filtro de status
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(o => o.status === statusFilter);
+      filtered = filtered.filter(o => o.order_status === statusFilter);
     }
 
     setFilteredOrders(filtered);
@@ -80,78 +89,12 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
   };
 
-  const statusLabels: Record<string, { label: string; color: string }> = {
-    PENDING: { label: 'Aguardando', color: 'bg-yellow-900/50 text-yellow-300' },
-    CONFIRMED: { label: 'Confirmado', color: 'bg-blue-900/50 text-blue-300' },
-    SHIPPED: { label: 'Enviado', color: 'bg-purple-900/50 text-purple-300' },
-    DELIVERED: { label: 'Entregue', color: 'bg-green-900/50 text-green-300' },
-    CANCELLED: { label: 'Cancelado', color: 'bg-red-900/50 text-red-300' }
-  };
+  if (selectedOrder?.isNew) {
+    return <ManualOrderForm onClose={() => setSelectedOrder(null)} onSave={loadOrders} />;
+  }
 
   if (selectedOrder) {
-    return (
-      <div className="min-h-screen bg-slate-900 text-white p-6">
-        <div className="max-w-4xl mx-auto">
-          <button onClick={() => setSelectedOrder(null)} className="flex items-center gap-2 text-slate-400 hover:text-white mb-6">
-            <ChevronLeft className="w-5 h-5" />
-            Voltar para pedidos
-          </button>
-
-          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-white">Pedido #{selectedOrder.id}</h2>
-                <p className="text-slate-400 text-sm">
-                  {new Date(selectedOrder.created_at).toLocaleString('pt-BR')}
-                </p>
-              </div>
-              <span className={`px-3 py-1 rounded text-sm font-medium ${statusLabels[selectedOrder.status].color}`}>
-                {statusLabels[selectedOrder.status].label}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-slate-700 rounded-lg p-4">
-                <h3 className="font-semibold text-white mb-3">Cliente</h3>
-                <div className="space-y-2 text-slate-300">
-                  <p>{selectedOrder.customer_name}</p>
-                  <div className="flex items-center gap-2">
-                    <p>{selectedOrder.customer_phone}</p>
-                    <a
-                      href={getWhatsAppLink(selectedOrder.customer_phone, selectedOrder.id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1 bg-green-600 hover:bg-green-700 rounded text-white"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-slate-700 rounded-lg p-4">
-                <h3 className="font-semibold text-white mb-3">Pagamento</h3>
-                <div className="space-y-2 text-slate-300">
-                  <p className="text-2xl font-bold text-white">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedOrder.total)}
-                  </p>
-                  <p className="text-sm">
-                    {selectedOrder.payment_method === 'PIX' ? 'PIX' :
-                     selectedOrder.payment_method === 'CARD' ? 'Cartão' :
-                     selectedOrder.payment_method === 'BOLETO' ? 'Boleto' : selectedOrder.payment_method}
-                  </p>
-                </div>
-              </div>
-
-              <div className="md:col-span-2 bg-slate-700 rounded-lg p-4">
-                <h3 className="font-semibold text-white mb-3">Endereço de Entrega</h3>
-                <p className="text-slate-300">{selectedOrder.customer_address}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <AdminOrderDetails orderId={selectedOrder.id} onBack={() => setSelectedOrder(null)} onSave={loadOrders} />;
   }
 
   return (
@@ -240,15 +183,17 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
               <label className="block text-sm text-slate-400 mb-2">Status</label>
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as OrderStatus)}
+                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
                 className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:border-primary"
               >
                 <option value="all">Todos</option>
-                <option value="PENDING">Aguardando</option>
-                <option value="CONFIRMED">Confirmado</option>
-                <option value="SHIPPED">Enviado</option>
-                <option value="DELIVERED">Entregue</option>
-                <option value="CANCELLED">Cancelado</option>
+                <option value={OrderStatus.PENDING_PAYMENT}>Aguardando pagamento</option>
+                <option value={OrderStatus.PAID}>Pago</option>
+                <option value={OrderStatus.PREPARING}>Preparando envio</option>
+                <option value={OrderStatus.SHIPPED}>Enviado</option>
+                <option value={OrderStatus.DELIVERED}>Concluído</option>
+                <option value={OrderStatus.CANCELED}>Cancelado</option>
+                <option value={OrderStatus.REFUNDED}>Estornado</option>
               </select>
             </div>
           </div>
@@ -256,8 +201,15 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
 
         {/* Lista de Pedidos */}
         <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-          <div className="p-6 border-b border-slate-700">
+          <div className="p-6 border-b border-slate-700 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Pedidos ({filteredOrders.length})</h2>
+            <button
+              onClick={() => setSelectedOrder({ isNew: true })}
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Registro Manual
+            </button>
           </div>
 
           {loading ? (
@@ -301,8 +253,8 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total)}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${statusLabels[order.status].color}`}>
-                          {statusLabels[order.status].label}
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${ORDER_STATUS_COLORS[order.order_status as OrderStatus]}`}>
+                          {ORDER_STATUS_LABELS[order.order_status as OrderStatus]}
                         </span>
                       </td>
                       <td className="px-6 py-4">
