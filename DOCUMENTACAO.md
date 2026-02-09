@@ -230,12 +230,13 @@ vitrine/
 #### 4. Área do Cliente
 - Visualização de dados pessoais
 - Edição de perfil (nome, telefone, CPF)
+- Endereço completo exibido corretamente
 - Alteração de senha
 - Histórico de pedidos com:
   - Número, data, status
   - Produtos e valores
   - Clique para ver detalhes
-- Exclusão de conta
+- Exclusão de conta (botão discreto)
 
 #### 5. Detalhes do Pedido
 - Informações completas
