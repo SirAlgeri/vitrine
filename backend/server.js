@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
+import https from 'https';
+import http from 'http';
 import { pool } from './db.js';
 import bcrypt from 'bcrypt';
 import { MercadoPagoConfig, Payment, Preference } from 'mercadopago';
@@ -100,6 +102,55 @@ app.put('/api/config', async (req, res) => {
     );
     res.json(result.rows[0]);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== FRETE ==========
+app.post('/api/frete/calcular', async (req, res) => {
+  try {
+    const { cepOrigem, cepDestino, peso, comprimento, altura, largura } = req.body;
+    
+    const postData = JSON.stringify({
+      cepOrigem,
+      cepDestino,
+      peso: peso || 0.3,
+      comprimento: comprimento || 16,
+      altura: altura || 2,
+      largura: largura || 11
+    });
+
+    const options = {
+      hostname: 'localhost',
+      port: 5001,
+      path: '/calcular',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    const resultado = await new Promise((resolve, reject) => {
+      const req = http.request(options, (response) => {
+        let data = '';
+        response.on('data', (chunk) => { data += chunk; });
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (e) {
+            reject(new Error('Resposta inválida do serviço de frete'));
+          }
+        });
+      });
+      req.on('error', reject);
+      req.write(postData);
+      req.end();
+    });
+
+    res.json(resultado);
+  } catch (err) {
+    console.error('Erro ao calcular frete:', err);
     res.status(500).json({ error: err.message });
   }
 });
