@@ -197,6 +197,7 @@ export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
                 product={product} 
                 onClick={(p) => setSelectedProduct(p)}
                 onAddToCart={onAddToCart}
+                markupPercentage={config.markupPercentage || 0}
               />
             ))}
           </div>

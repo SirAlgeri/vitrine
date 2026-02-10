@@ -42,7 +42,7 @@ app.get('/api/config', async (req, res) => {
 
 app.put('/api/config', async (req, res) => {
   try {
-    const { store_name, primary_color, secondary_color, whatsapp_number, logo_url, enable_online_checkout, enable_whatsapp_checkout, payment_methods } = req.body;
+    const { store_name, primary_color, secondary_color, whatsapp_number, logo_url, enable_online_checkout, enable_whatsapp_checkout, payment_methods, markup_percentage } = req.body;
     
     // Construir query dinamicamente baseado nos campos enviados
     const updates = [];
@@ -80,6 +80,14 @@ app.put('/api/config', async (req, res) => {
     if (payment_methods !== undefined) {
       updates.push(`payment_methods = $${paramCount++}`);
       values.push(JSON.stringify(payment_methods));
+    }
+    if (markup_percentage !== undefined) {
+      const markup = Number(markup_percentage);
+      if (markup < 0 || markup > 100) {
+        return res.status(400).json({ error: 'Margem deve estar entre 0% e 100%' });
+      }
+      updates.push(`markup_percentage = $${paramCount++}`);
+      values.push(markup);
     }
     
     if (updates.length === 0) {
@@ -692,6 +700,7 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
       internal_payment_status: paymentStatus
     });
   } catch (err) {
+    console.error('Erro ao processar pagamento:', err.message);
     res.status(500).json({ error: err.message, details: err.cause });
   }
 });
@@ -764,6 +773,31 @@ app.put('/api/orders/:id/status', async (req, res) => {
     
     res.json(result);
   } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Atualizar pagamento do pedido
+app.put('/api/orders/:id/payment', async (req, res) => {
+  try {
+    const { payment_id, payment_status, payment_method } = req.body;
+    
+    // Mapear status do MP para status interno
+    const internalPaymentStatus = mapMercadoPagoStatus(payment_status);
+    
+    await pool.query(
+      'UPDATE orders SET payment_id = $1, payment_status = $2, payment_method = $3 WHERE id = $4',
+      [payment_id, internalPaymentStatus, payment_method, req.params.id]
+    );
+    
+    // Se pagamento aprovado, atualizar status do pedido para processing
+    if (payment_status === 'approved') {
+      await updateOrderStatus(pool, req.params.id, payment_status, 'system', 'Pagamento aprovado');
+    }
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erro ao atualizar pagamento:', err.message);
     res.status(400).json({ error: err.message });
   }
 });

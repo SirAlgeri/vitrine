@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Customer, CartItem, AppConfig } from '../types';
 import { ShoppingBag, Check } from 'lucide-react';
 import { validateCPF, formatCPF, formatCEP, fetchAddressByCEP } from '../services/validators';
 import PaymentForm from '../components/PaymentForm';
+import { applyMarkup } from '../services/pricing';
 
 interface CheckoutPageProps {
   customer: Customer | null;
@@ -24,10 +25,12 @@ const steps: { id: Step; label: string }[] = [
 
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, config, onClearCart }) => {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<Step>('identification');
+  const { orderId: urlOrderId } = useParams();
+  const [currentStep, setCurrentStep] = useState<Step>(urlOrderId ? 'payment' : 'identification');
   const [saving, setSaving] = useState(false);
-  const [orderId, setOrderId] = useState<number | null>(null);
+  const [orderId, setOrderId] = useState<number | null>(urlOrderId ? Number(urlOrderId) : null);
   const [paymentData, setPaymentData] = useState<any>(null);
+  const [existingOrder, setExistingOrder] = useState<any>(null);
   const [formData, setFormData] = useState({
     cpf: '',
     cep: '',
@@ -55,6 +58,22 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       });
     }
   }, [customer]);
+
+  useEffect(() => {
+    if (urlOrderId) {
+      loadExistingOrder();
+    }
+  }, [urlOrderId]);
+
+  const loadExistingOrder = async () => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/orders/${urlOrderId}`);
+      const data = await res.json();
+      setExistingOrder(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleCEPChange = async (cep: string) => {
     const formatted = formatCEP(cep);
@@ -153,39 +172,55 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
     } else if (currentStep === 'review') {
       setSaving(true);
       try {
-        const address = `${formData.endereco}, ${formData.numero}${formData.complemento ? ', ' + formData.complemento : ''} - ${formData.bairro}, ${formData.cidade}/${formData.estado} - CEP: ${formData.cep}`;
-        
-        let paymentMethod = 'PIX';
-        if (paymentData) {
-          if (paymentData.payment_method_id === 'pix') {
-            paymentMethod = 'PIX';
-          } else if (paymentData.payment_method_id) {
-            paymentMethod = 'CARD';
+        if (urlOrderId) {
+          // Atualizar pedido existente com dados de pagamento
+          await fetch(`http://localhost:3001/api/orders/${urlOrderId}/payment`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              payment_id: paymentData?.id || null,
+              payment_status: paymentData?.status || 'pending',
+              payment_method: paymentData?.payment_method_id === 'pix' ? 'PIX' : 'CARD'
+            })
+          });
+          
+          navigate(`/pedido/${urlOrderId}`);
+        } else {
+          // Criar novo pedido (fluxo normal do checkout)
+          const address = `${formData.endereco}, ${formData.numero}${formData.complemento ? ', ' + formData.complemento : ''} - ${formData.bairro}, ${formData.cidade}/${formData.estado} - CEP: ${formData.cep}`;
+          
+          let paymentMethod = 'PIX';
+          if (paymentData) {
+            if (paymentData.payment_method_id === 'pix') {
+              paymentMethod = 'PIX';
+            } else if (paymentData.payment_method_id) {
+              paymentMethod = 'CARD';
+            }
           }
+          
+          const response = await fetch('http://localhost:3001/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customer_id: customer!.id,
+              customer_name: customer!.nome_completo,
+              customer_phone: customer!.telefone,
+              customer_address: address,
+              payment_method: paymentMethod,
+              payment_id: paymentData?.id || null,
+              payment_provider_status: paymentData?.status || null,
+              total: cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+              items: cart
+            })
+          });
+          const order = await response.json();
+          setOrderId(order.id);
+          onClearCart();
+          navigate(`/pedido/${order.id}`);
         }
-        
-        const response = await fetch('http://localhost:3001/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customer_id: customer!.id,
-            customer_name: customer!.nome_completo,
-            customer_phone: customer!.telefone,
-            customer_address: address,
-            payment_method: paymentMethod,
-            payment_id: paymentData?.id || null,
-            payment_provider_status: paymentData?.status || null,
-            total: cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
-            items: cart
-          })
-        });
-        const order = await response.json();
-        setOrderId(order.id);
-        onClearCart();
-        navigate(`/pedido/${order.id}`);
       } catch (err) {
         console.error(err);
-        alert('Erro ao criar pedido');
+        alert('Erro ao processar pedido');
       } finally {
         setSaving(false);
       }
@@ -214,7 +249,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
     );
   }
 
-  if (cart.length === 0) {
+  if (cart.length === 0 && !urlOrderId) {
     return (
       <div className="max-w-md mx-auto text-center py-20">
         <div className="bg-slate-800 rounded-2xl p-8 border border-slate-700">
@@ -228,8 +263,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
     );
   }
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = existingOrder ? Number(existingOrder.total) : cart.reduce((sum, item) => {
+    const finalPrice = applyMarkup(item.price, config.markupPercentage || 0);
+    return sum + finalPrice * item.quantity;
+  }, 0);
   const currentStepIndex = steps.findIndex(s => s.id === currentStep);
+  const items = existingOrder ? existingOrder.items : cart;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -403,6 +442,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
               cpf: formData.cpf,
               name: customer.nome_completo
             }}
+            markupPercentage={config.markupPercentage || 0}
             onSuccess={(data) => {
               setPaymentData(data);
               setCurrentStep('review');
@@ -521,14 +561,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
             <div>
               <h3 className="font-semibold text-white mb-2">Produtos</h3>
               <div className="space-y-3">
-                {cart.map(item => (
+                {items.map((item: any) => (
                   <div key={item.id} className="flex gap-3 items-center">
-                    <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded-lg" />
+                    <img src={item.image || item.product_image} alt={item.name || item.product_name} className="w-16 h-16 object-cover rounded-lg" />
                     <div className="flex-1">
-                      <p className="text-white font-medium">{item.name}</p>
+                      <p className="text-white font-medium">{item.name || item.product_name}</p>
                       <p className="text-slate-400 text-sm">Quantidade: {item.quantity}</p>
                     </div>
-                    <span className="text-white font-semibold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price * item.quantity)}</span>
+                    <span className="text-white font-semibold">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                        item.subtotal || (item.price * item.quantity)
+                      )}
+                    </span>
                   </div>
                 ))}
               </div>

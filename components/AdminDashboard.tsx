@@ -180,6 +180,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
               <p className="text-xs text-slate-500 mt-1">Formato: +55 (DDD) 99999-9999</p>
             </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-slate-400 mb-2">Margem de Lucro (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={tempConfig.markupPercentage || 0}
+                onChange={(e) => setTempConfig({...tempConfig, markupPercentage: Number(e.target.value)})}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Margem aplicada sobre o preço base. PIX terá desconto igual à margem. (0% a 100%)
+              </p>
+            </div>
             
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">Cor Principal (Destaque)</label>

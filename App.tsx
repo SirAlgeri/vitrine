@@ -49,7 +49,8 @@ const AppContent: React.FC = () => {
           primaryColor: configData.primary_color,
           secondaryColor: configData.secondary_color,
           whatsappNumber: configData.whatsapp_number,
-          logo_url: configData.logo_url
+          logo_url: configData.logo_url,
+          markupPercentage: configData.markup_percentage || 0
         });
       }
     } catch (err) {
@@ -114,7 +115,8 @@ const AppContent: React.FC = () => {
         primary_color: newConfig.primaryColor,
         secondary_color: newConfig.secondaryColor,
         whatsapp_number: newConfig.whatsappNumber,
-        logo_url: newConfig.logo_url
+        logo_url: newConfig.logo_url,
+        markup_percentage: newConfig.markupPercentage
       });
       setConfig(newConfig);
     } catch (err) {
@@ -178,6 +180,18 @@ const AppContent: React.FC = () => {
 
           <Route 
             path="/checkout" 
+            element={
+              <CheckoutPage 
+                customer={customer}
+                cart={cart}
+                config={config}
+                onClearCart={handleClearCart}
+              />
+            } 
+          />
+
+          <Route 
+            path="/pedido/:orderId/pagar" 
             element={
               <CheckoutPage 
                 customer={customer}

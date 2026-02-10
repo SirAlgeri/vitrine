@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Package, ArrowLeft, Clock } from 'lucide-react';
+import { Package, ArrowLeft, Clock, CreditCard } from 'lucide-react';
 import { StatusBadge, OrderTimeline } from '../components/StatusComponents';
 import { PaymentStatus, OrderStatus } from '../shared/constants/status';
 
@@ -16,7 +16,7 @@ export const OrderDetailsPage: React.FC = () => {
 
   const loadOrder = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/orders/${orderId}`);
+      const res = await fetch(`http://localhost:3001/api/orders/${orderId}?t=${Date.now()}`);
       const data = await res.json();
       setOrder(data);
     } catch (err) {
@@ -26,8 +26,18 @@ export const OrderDetailsPage: React.FC = () => {
     }
   };
 
+  const handlePaymentClick = () => {
+    if (order?.payment_status === 'pending' || order?.payment_status === 'PAYMENT_PENDING') {
+      // Salvar orderId no sessionStorage para o checkout saber que é um pagamento de pedido existente
+      sessionStorage.setItem('paymentOrderId', orderId as string);
+      navigate(`/pedido/${orderId}/pagar`);
+    }
+  };
+
   if (loading) return <div className="text-white">Carregando...</div>;
   if (!order) return <div className="text-white">Pedido não encontrado</div>;
+
+  const isPendingPayment = order.payment_status === 'pending' || order.payment_status === 'PAYMENT_PENDING';
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -56,14 +66,26 @@ export const OrderDetailsPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div className="bg-slate-700 rounded-lg p-4">
+          <div 
+            className={`bg-slate-700 rounded-lg p-4 ${isPendingPayment ? 'cursor-pointer hover:bg-slate-600 transition-colors' : ''}`}
+            onClick={handlePaymentClick}
+          >
             <h3 className="text-sm font-medium text-slate-400 mb-2">Status do Pedido</h3>
             <StatusBadge status={order.order_status as OrderStatus} type="order" />
           </div>
 
-          <div className="bg-slate-700 rounded-lg p-4">
+          <div 
+            className={`bg-slate-700 rounded-lg p-4 ${isPendingPayment ? 'cursor-pointer hover:bg-slate-600 transition-colors border-2 border-yellow-500/50' : ''}`}
+            onClick={handlePaymentClick}
+          >
             <h3 className="text-sm font-medium text-slate-400 mb-2">Status do Pagamento</h3>
             <StatusBadge status={order.payment_status as PaymentStatus} type="payment" />
+            {isPendingPayment && (
+              <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1">
+                <CreditCard className="w-3 h-3" />
+                Clique para pagar
+              </p>
+            )}
           </div>
         </div>
 
@@ -74,6 +96,37 @@ export const OrderDetailsPage: React.FC = () => {
             paymentStatus={order.payment_status as PaymentStatus}
           />
         </div>
+
+        {order.order_status === OrderStatus.SHIPPED && order.tracking_code && (
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <Package className="w-5 h-5 text-blue-400 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-blue-400 mb-2">Pedido Enviado</h3>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-slate-400 text-xs mb-1">Código de Rastreio:</p>
+                    <p className="text-white font-mono font-semibold text-lg">{order.tracking_code}</p>
+                  </div>
+                  {order.delivery_deadline && (
+                    <div className="flex items-center gap-2 text-slate-300">
+                      <Clock className="w-4 h-4" />
+                      <span className="text-sm">
+                        Previsão de entrega: <span className="font-semibold">
+                          {new Date(order.delivery_deadline).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: 'long',
+                            year: 'numeric'
+                          })}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-slate-700 rounded-lg p-4 mb-6">
           <h3 className="text-sm font-medium text-slate-400 mb-2">Total</h3>
@@ -127,12 +180,21 @@ export const OrderDetailsPage: React.FC = () => {
 
           <div>
             <h3 className="text-lg font-semibold text-white mb-3">Forma de Pagamento</h3>
-            <div className="bg-slate-700 rounded-lg p-4 text-slate-300">
+            <div 
+              className={`bg-slate-700 rounded-lg p-4 text-slate-300 ${isPendingPayment ? 'cursor-pointer hover:bg-slate-600 transition-colors border-2 border-yellow-500/50' : ''}`}
+              onClick={isPendingPayment ? handlePaymentClick : undefined}
+            >
               <p>
                 {order.payment_method === 'PIX' ? 'PIX' :
                  order.payment_method === 'CARD' ? 'Cartão de Crédito' :
                  order.payment_method === 'CASH' ? 'Dinheiro' : order.payment_method}
               </p>
+              {isPendingPayment && (
+                <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1">
+                  <CreditCard className="w-3 h-3" />
+                  Clique para realizar o pagamento
+                </p>
+              )}
             </div>
           </div>
         </div>

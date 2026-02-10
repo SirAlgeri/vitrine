@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CreditCard, QrCode, Loader2, Check, X } from 'lucide-react';
 import CreditCardVisual from './CreditCardVisual';
+import { getPixPrice } from '../services/pricing';
 
 interface PaymentFormProps {
   amount: number;
@@ -11,9 +12,10 @@ interface PaymentFormProps {
     cpf: string;
     name: string;
   };
+  markupPercentage?: number;
 }
 
-export default function PaymentForm({ amount, onSuccess, onError, customerData }: PaymentFormProps) {
+export default function PaymentForm({ amount, onSuccess, onError, customerData, markupPercentage = 0 }: PaymentFormProps) {
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'pix' | 'boleto'>('pix');
   const [loading, setLoading] = useState(false);
   const [mp, setMp] = useState<any>(null);
@@ -28,6 +30,8 @@ export default function PaymentForm({ amount, onSuccess, onError, customerData }
   const [cardCvv, setCardCvv] = useState('');
   const [installments, setInstallments] = useState(1);
   const [installmentsOptions, setInstallmentsOptions] = useState<any[]>([]);
+  
+  const pixAmount = getPixPrice(amount, markupPercentage);
 
   // PIX data
   const [pixQrCode, setPixQrCode] = useState('');
@@ -191,6 +195,10 @@ export default function PaymentForm({ amount, onSuccess, onError, customerData }
       
       const result = await response.json();
       
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao processar pagamento');
+      }
+      
       if (result.status === 'approved') {
         onSuccess(result);
       } else {
@@ -213,7 +221,7 @@ export default function PaymentForm({ amount, onSuccess, onError, customerData }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transaction_amount: amount,
+          transaction_amount: pixAmount,
           description: `Pedido - ${customerData.name}`,
           payer: {
             email: customerData.email,
@@ -442,6 +450,21 @@ export default function PaymentForm({ amount, onSuccess, onError, customerData }
       {/* PIX Payment */}
       {paymentMethod === 'pix' && (
         <div className="space-y-4">
+          {markupPercentage > 0 && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+              <p className="text-green-400 text-sm font-medium mb-1">
+                🎉 {markupPercentage}% de desconto no PIX!
+              </p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-slate-400 line-through text-sm">
+                  R$ {amount.toFixed(2)}
+                </span>
+                <span className="text-green-400 font-bold text-xl">
+                  R$ {pixAmount.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          )}
           {!pixQrCode ? (
             <button
               onClick={handlePixPayment}
@@ -454,7 +477,7 @@ export default function PaymentForm({ amount, onSuccess, onError, customerData }
                   Gerando PIX...
                 </>
               ) : (
-                `Gerar PIX - R$ ${amount.toFixed(2)}`
+                `Gerar PIX - R$ ${pixAmount.toFixed(2)}`
               )}
             </button>
           ) : (
