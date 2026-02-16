@@ -515,10 +515,10 @@ app.post('/api/products', async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    const { id, name, price, description, image, images, fields } = req.body;
+    const { id, name, price, description, image, images, stock_quantity, fields } = req.body;
     const result = await client.query(
-      'INSERT INTO products (id, name, price, description, image) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [id, name, price, description, image]
+      'INSERT INTO products (id, name, price, description, image, stock_quantity) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [id, name, price, description, image, stock_quantity || 1]
     );
     
     // Save multiple images
@@ -558,10 +558,10 @@ app.put('/api/products/:id', async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    const { name, price, description, image, images, fields } = req.body;
+    const { name, price, description, image, images, stock_quantity, fields } = req.body;
     const result = await client.query(
-      'UPDATE products SET name = $1, price = $2, description = $3, image = $4 WHERE id = $5 RETURNING *',
-      [name, price, description, image, req.params.id]
+      'UPDATE products SET name = $1, price = $2, description = $3, image = $4, stock_quantity = $5 WHERE id = $6 RETURNING *',
+      [name, price, description, image, stock_quantity !== undefined ? stock_quantity : 1, req.params.id]
     );
     
     if (result.rows.length === 0) {
@@ -705,6 +705,14 @@ app.post('/api/orders', async (req, res) => {
         'INSERT INTO order_items (order_id, product_id, product_name, product_price, product_image, quantity, subtotal) VALUES ($1, $2, $3, $4, $5, $6, $7)',
         [order.id, item.product_id || item.id, item.product_name || item.name, item.product_price || item.price, item.product_image || item.image, item.quantity, item.subtotal || (item.price * item.quantity)]
       );
+      
+      // Deduzir do estoque se pagamento aprovado
+      if (payment_status === PaymentStatus.APPROVED) {
+        await client.query(
+          'UPDATE products SET stock_quantity = GREATEST(stock_quantity - $1, 0) WHERE id = $2',
+          [item.quantity, item.product_id || item.id]
+        );
+      }
     }
     
     // Registrar histórico inicial

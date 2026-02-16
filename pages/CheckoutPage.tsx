@@ -594,20 +594,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
             <div>
               <h3 className="font-semibold text-white mb-2">Produtos</h3>
               <div className="space-y-3">
-                {items.map((item: any) => (
-                  <div key={item.id} className="flex gap-3 items-center">
-                    <img src={item.image || item.product_image} alt={item.name || item.product_name} className="w-16 h-16 object-cover rounded-lg" />
-                    <div className="flex-1">
-                      <p className="text-white font-medium">{item.name || item.product_name}</p>
-                      <p className="text-slate-400 text-sm">Quantidade: {item.quantity}</p>
+                {items.map((item: any) => {
+                  const priceWithMarkup = applyMarkup(item.price, config.markupPercentage || 0);
+                  return (
+                    <div key={item.id} className="flex gap-3 items-center">
+                      <img src={item.image || item.product_image} alt={item.name || item.product_name} className="w-16 h-16 object-cover rounded-lg" />
+                      <div className="flex-1">
+                        <p className="text-white font-medium">{item.name || item.product_name}</p>
+                        <p className="text-slate-400 text-sm">Quantidade: {item.quantity}</p>
+                      </div>
+                      <span className="text-white font-semibold">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                          item.subtotal || (priceWithMarkup * item.quantity)
+                        )}
+                      </span>
                     </div>
-                    <span className="text-white font-semibold">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                        item.subtotal || (item.price * item.quantity)
-                      )}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="border-t border-slate-700 mt-2 pt-2 flex justify-between text-white font-bold">
                 <span>Total</span>
