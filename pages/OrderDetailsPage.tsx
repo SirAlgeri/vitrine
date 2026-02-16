@@ -129,10 +129,23 @@ export const OrderDetailsPage: React.FC = () => {
         )}
 
         <div className="bg-slate-700 rounded-lg p-4 mb-6">
-          <h3 className="text-sm font-medium text-slate-400 mb-2">Total</h3>
+          <h3 className="text-sm font-medium text-slate-400 mb-2">Total do Pedido</h3>
           <p className="text-2xl font-bold text-white">
             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.total)}
           </p>
+          {order.frete_valor > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-600">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-400">Frete ({order.frete_servico}):</span>
+                <span className="text-slate-300">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(order.frete_valor)}
+                </span>
+              </div>
+              {order.frete_prazo && (
+                <p className="text-slate-400 text-xs mt-1">Prazo: {order.frete_prazo} dias úteis</p>
+              )}
+            </div>
+          )}
           {order.payment_id && (
             <p className="text-slate-400 text-xs mt-2">ID Pagamento: {order.payment_id}</p>
           )}
@@ -168,10 +181,11 @@ export const OrderDetailsPage: React.FC = () => {
                   )}
                   <div className="flex-1">
                     <p className="text-white font-medium">{item.product_name}</p>
+                    <p className="text-slate-400 text-sm">ID: {item.product_id}</p>
                     <p className="text-slate-400 text-sm">Quantidade: {item.quantity}</p>
                   </div>
                   <p className="text-white font-semibold">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.subtotal)}
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.product_price)}
                   </p>
                 </div>
               ))}

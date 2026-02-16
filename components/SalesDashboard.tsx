@@ -16,6 +16,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
   const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
   const [period, setPeriod] = useState<Period>('30days');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [searchText, setSearchText] = useState('');
   const [customDates, setCustomDates] = useState({ start: '', end: '' });
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -26,7 +27,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
 
   useEffect(() => {
     applyFilters();
-  }, [orders, period, statusFilter, customDates]);
+  }, [orders, period, statusFilter, searchText, customDates]);
 
   const loadOrders = async () => {
     try {
@@ -73,6 +74,18 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
     if (statusFilter !== 'all') {
       filtered = filtered.filter(o => o.order_status === statusFilter);
     }
+
+    // Filtro de busca (ID ou nome do cliente)
+    if (searchText.trim()) {
+      const search = searchText.toLowerCase().trim();
+      filtered = filtered.filter(o => 
+        o.id.toString().includes(search) ||
+        o.customer_name.toLowerCase().includes(search)
+      );
+    }
+
+    // Ordenar por ID (número do pedido) decrescente
+    filtered.sort((a, b) => b.id - a.id);
 
     setFilteredOrders(filtered);
   };
@@ -141,7 +154,18 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
             <h2 className="text-lg font-semibold">Filtros</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-2">Buscar</label>
+              <input
+                type="text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="ID ou nome do cliente"
+                className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:border-primary"
+              />
+            </div>
+
             <div>
               <label className="block text-sm text-slate-400 mb-2">Período</label>
               <select

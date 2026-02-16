@@ -14,6 +14,7 @@ import {
   updateOrderStatus,
   updateOrderStatusManual 
 } from './statusManager.js';
+import { sendOrderStatusEmail } from './emailService.js';
 
 dotenv.config();
 
@@ -44,7 +45,7 @@ app.get('/api/config', async (req, res) => {
 
 app.put('/api/config', async (req, res) => {
   try {
-    const { store_name, primary_color, secondary_color, whatsapp_number, logo_url, enable_online_checkout, enable_whatsapp_checkout, payment_methods, markup_percentage } = req.body;
+    const { store_name, primary_color, secondary_color, whatsapp_number, logo_url, enable_online_checkout, enable_whatsapp_checkout, payment_methods, markup_percentage, cep_origem } = req.body;
     
     // Construir query dinamicamente baseado nos campos enviados
     const updates = [];
@@ -90,6 +91,14 @@ app.put('/api/config', async (req, res) => {
       }
       updates.push(`markup_percentage = $${paramCount++}`);
       values.push(markup);
+    }
+    if (cep_origem !== undefined) {
+      const cleanCep = String(cep_origem).replace(/\D/g, '');
+      if (cleanCep.length !== 8) {
+        return res.status(400).json({ error: 'CEP deve ter 8 dígitos' });
+      }
+      updates.push(`cep_origem = $${paramCount++}`);
+      values.push(cleanCep);
     }
     
     if (updates.length === 0) {
@@ -672,6 +681,32 @@ app.post('/api/orders', async (req, res) => {
     );
     
     await client.query('COMMIT');
+    
+    // Enviar email de confirmação (não bloqueia o fluxo)
+    if (customer_id) {
+      pool.query('SELECT email FROM customers WHERE id = $1', [customer_id])
+        .then(customerResult => {
+          if (customerResult.rows[0]?.email) {
+            const customerEmail = customerResult.rows[0].email;
+            
+            // Buscar config para cores
+            return pool.query('SELECT primary_color, secondary_color, store_name FROM config LIMIT 1')
+              .then(configResult => {
+                const config = configResult.rows[0] || {};
+                const orderWithEmail = {
+                  ...order,
+                  customer_email: customerEmail,
+                  items: items
+                };
+                return sendOrderStatusEmail(orderWithEmail, 'pending', config);
+              });
+          }
+        })
+        .catch(err => {
+          console.error('❌ Erro ao enviar email de confirmação (não crítico):', err);
+        });
+    }
+    
     res.status(201).json(order);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -683,7 +718,7 @@ app.post('/api/orders', async (req, res) => {
 
 app.get('/api/orders', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
+    const result = await pool.query('SELECT * FROM orders ORDER BY id DESC');
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -808,11 +843,45 @@ app.post('/api/mercadopago/create-boleto', async (req, res) => {
 
 // Atualizar status do pedido (admin)
 app.put('/api/orders/:id/status', async (req, res) => {
+  console.log('🔄 Recebendo requisição para atualizar status');
+  console.log('Order ID:', req.params.id);
+  console.log('Body:', req.body);
+  
   try {
     const { order_status, tracking_code, delivery_deadline, notes } = req.body;
     
+    console.log('📦 Buscando pedido...');
+    
+    // Buscar pedido completo com email do cliente
+    const orderResult = await pool.query(`
+      SELECT o.*, 
+        c.email as customer_email,
+        json_agg(json_build_object(
+          'id', oi.id,
+          'product_id', oi.product_id,
+          'product_name', oi.product_name,
+          'product_price', oi.product_price,
+          'quantity', oi.quantity,
+          'subtotal', oi.subtotal,
+          'product_image', p.image
+        )) as items
+      FROM orders o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN order_items oi ON o.id = oi.order_id
+      LEFT JOIN products p ON oi.product_id = p.id
+      WHERE o.id = $1
+      GROUP BY o.id, c.email
+    `, [req.params.id]);
+    
+    const order = orderResult.rows[0];
+    console.log('📦 Pedido encontrado:', order ? 'Sim' : 'Não');
+    
+    console.log('🔄 Atualizando status...');
+    
     // Atualizar status
     const result = await updateOrderStatusManual(pool, req.params.id, order_status, 'admin', notes);
+    
+    console.log('✅ Status atualizado:', result);
     
     // Atualizar rastreio se fornecido
     if (tracking_code || delivery_deadline) {
@@ -820,10 +889,36 @@ app.put('/api/orders/:id/status', async (req, res) => {
         'UPDATE orders SET tracking_code = $1, delivery_deadline = $2 WHERE id = $3',
         [tracking_code || null, delivery_deadline || null, req.params.id]
       );
+      
+      // Atualizar objeto order com novos valores
+      order.tracking_code = tracking_code || null;
+      order.delivery_deadline = delivery_deadline || null;
+    }
+    
+    // Enviar email (não bloqueia o fluxo se falhar)
+    if (order && order.customer_email) {
+      console.log('📧 Enviando email para:', order.customer_email);
+      console.log('📦 Dados do pedido:', {
+        tracking_code: order.tracking_code,
+        delivery_deadline: order.delivery_deadline
+      });
+      
+      // Buscar configurações para cores
+      pool.query('SELECT primary_color, secondary_color, store_name FROM config LIMIT 1')
+        .then(configResult => {
+          const config = configResult.rows[0] || {};
+          return sendOrderStatusEmail(order, order_status, config);
+        })
+        .catch(err => {
+          console.error('❌ Erro ao enviar email (não crítico):', err);
+        });
+    } else {
+      console.warn('⚠️ Pedido sem email do cliente:', req.params.id);
     }
     
     res.json(result);
   } catch (err) {
+    console.error('❌ ERRO ao atualizar status:', err);
     res.status(400).json({ error: err.message });
   }
 });

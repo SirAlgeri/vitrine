@@ -171,20 +171,29 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
     e.preventDefault();
     
     try {
-      await fetch('http://localhost:3001/api/orders', {
+      const response = await fetch('http://localhost:3001/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
           payment_provider_status: formData.payment_status,
+          frete_servico: null,
+          frete_valor: 0,
+          frete_prazo: null,
           created_at: formData.purchase_date + 'T00:00:00'
         })
       });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao criar pedido');
+      }
+      
       onSave();
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Erro ao criar pedido');
+      alert(err.message || 'Erro ao criar pedido');
     }
   };
 
@@ -215,15 +224,32 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-slate-300">Cliente</label>
-              {!showNewCustomer && (
-                <button
-                  type="button"
-                  onClick={() => setShowNewCustomer(true)}
-                  className="text-sm text-primary hover:text-primary/80"
-                >
-                  + Novo Cliente
-                </button>
-              )}
+              <div className="flex gap-2">
+                {formData.customer_id && !showNewCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData({
+                      ...formData,
+                      customer_id: '',
+                      customer_name: '',
+                      customer_phone: '',
+                      customer_address: ''
+                    })}
+                    className="text-sm text-slate-400 hover:text-white"
+                  >
+                    Trocar Cliente
+                  </button>
+                )}
+                {!showNewCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCustomer(true)}
+                    className="text-sm text-primary hover:text-primary/80"
+                  >
+                    + Novo Cliente
+                  </button>
+                )}
+              </div>
             </div>
             
             {showNewCustomer ? (
@@ -327,17 +353,42 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
                 </div>
               </div>
             ) : (
-              <select
-                required
-                value={formData.customer_id}
-              onChange={(e) => handleCustomerChange(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:border-primary"
-            >
-              <option value="">Selecione um cliente</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>{c.nome_completo} - {c.telefone}</option>
-              ))}
-            </select>
+              <>
+                <input
+                  required
+                  list="customers-list"
+                  value={formData.customer_name || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Buscar cliente por nome
+                    const customer = customers.find(c => 
+                      c.nome_completo.toLowerCase() === value.toLowerCase() ||
+                      c.nome_completo.toLowerCase().includes(value.toLowerCase())
+                    );
+                    if (customer) {
+                      handleCustomerChange(customer.id);
+                    } else {
+                      // Mantém o texto digitado
+                      setFormData({
+                        ...formData,
+                        customer_id: '',
+                        customer_name: value,
+                        customer_phone: '',
+                        customer_address: ''
+                      });
+                    }
+                  }}
+                  placeholder="Digite para buscar cliente..."
+                  className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:border-primary"
+                />
+                <datalist id="customers-list">
+                  {customers.map(c => (
+                    <option key={c.id} value={c.nome_completo}>
+                      {c.telefone}
+                    </option>
+                  ))}
+                </datalist>
+              </>
             )}
           </div>
 
@@ -387,14 +438,16 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
                     <div>
                       <label className="text-xs text-slate-400 mb-1 block">Preço</label>
                       <input
-                        type="text"
-                        value={item.product_price ? `R$ ${parseFloat(item.product_price).toFixed(2)}` : 'R$ 0,00'}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.product_price || ''}
                         onChange={(e) => {
-                          const value = e.target.value.replace(/[^\d,]/g, '').replace(',', '.');
-                          updateItem(index, 'product_price', parseFloat(value) || 0);
+                          const value = parseFloat(e.target.value) || 0;
+                          updateItem(index, 'product_price', value);
                         }}
                         className="w-full px-3 py-2 bg-slate-600 text-white rounded border border-slate-500 focus:outline-none focus:border-primary text-sm"
-                        placeholder="R$ 0,00"
+                        placeholder="0.00"
                       />
                     </div>
                     
