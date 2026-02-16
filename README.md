@@ -1,13 +1,15 @@
 # Vitrine Pro - E-commerce System
 
-Sistema completo de e-commerce com integração Mercado Pago, gestão de pedidos e painel administrativo.
+Sistema completo de e-commerce com integração Mercado Pago, cálculo de frete, gestão de pedidos e painel administrativo.
 
 ## Funcionalidades
 
 - ✅ Catálogo de produtos com busca e filtros
 - ✅ Carrinho de compras
+- ✅ **Cálculo de frete (PAC/SEDEX) via microserviço**
 - ✅ Checkout com múltiplas formas de pagamento (PIX, Cartão, Boleto)
 - ✅ Integração completa com Mercado Pago
+- ✅ Sistema de margem/markup com desconto PIX
 - ✅ Sistema de status padronizado (pagamento + pedido)
 - ✅ Painel administrativo completo
 - ✅ Registro manual de pedidos
@@ -20,6 +22,7 @@ Sistema completo de e-commerce com integração Mercado Pago, gestão de pedidos
 ## Pré-requisitos
 
 - Node.js 18+
+- Python 3.12+ (para microserviço de frete)
 - PostgreSQL 14+ (via Docker recomendado)
 - Conta no Mercado Pago (para pagamentos)
 
@@ -49,6 +52,8 @@ docker run -d \
 # Execute as migrations
 docker exec vitrinepro-postgres psql -U postgres -d vitrinepro < database/schema.sql
 docker exec vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-status-standardization.sql
+docker exec vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-markup.sql
+docker exec vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-frete.sql
 
 # Configure timezone
 docker exec vitrinepro-postgres psql -U postgres -d vitrinepro -c "ALTER DATABASE vitrinepro SET timezone TO 'America/Sao_Paulo';"
@@ -62,20 +67,38 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/vitrinepro
 PORT=3001
 ```
 
-5. **Inicie o backend**
+5. **Inicie o microserviço de frete (Python)**
+```bash
+cd frete-service
+python3 server.py
+# Rodará na porta 5001
+```
+
+6. **Inicie o backend (Node.js)**
 ```bash
 cd backend
 node server.js
+# Rodará na porta 3001
 ```
 
-6. **Inicie o frontend**
+7. **Inicie o frontend (React)**
 ```bash
 npm run dev
+# Rodará na porta 5173
 ```
 
-7. **Acesse o sistema**
+8. **Configure o sistema**
+- Acesse: http://localhost:5173/admin
+- Vá em "Configurações"
+- Configure:
+  - CEP de Origem (para cálculo de frete)
+  - Margem de Lucro (%)
+  - Outras configurações
+
+9. **Acesse o sistema**
 - Frontend: http://localhost:5173
 - Backend: http://localhost:3001
+- Microserviço Frete: http://localhost:5001
 
 ## Documentação Completa
 
@@ -88,6 +111,7 @@ npm run dev
 
 ### Documentação Técnica
 - [Documentação Completa](DOCUMENTACAO.md)
+- [Sistema de Frete](FRETE.md) 🆕
 - [Sistema de Status](STATUS_PADRONIZACAO.md)
 - [Integração Mercado Pago](MERCADOPAGO.md)
 - [Banco de Dados](database/INSTALL.md)
@@ -99,36 +123,80 @@ npm run dev
 ### Histórico
 - [Changelog](CHANGELOG.md)
 
+## Arquitetura
+
+### Microserviços
+```
+┌─────────────────┐
+│  Frontend React │ :5173
+│  (TypeScript)   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Backend Node   │ :3001
+│  (Express)      │
+└────┬────────┬───┘
+     │        │
+     │        └──────────┐
+     ▼                   ▼
+┌─────────────┐   ┌──────────────┐
+│ PostgreSQL  │   │ Microserviço │
+│   Banco     │   │ Frete Python │ :5001
+└─────────────┘   └──────────────┘
+```
+
 ## Estrutura do Projeto
 
 ```
 vitrine/
-├── backend/              # API Node.js + Express
-│   ├── server.js        # Servidor principal
-│   └── statusManager.js # Gerenciador de status
-├── components/          # Componentes React
+├── frete-service/       # 🆕 Microserviço Python
+│   ├── server.py       # Cálculo de frete
+│   └── README.md       # Documentação
+├── backend/            # API Node.js + Express
+│   ├── server.js      # Servidor principal
+│   └── statusManager.js
+├── services/           # 🆕 Serviços frontend
+│   ├── freteService.ts # Cliente HTTP frete
+│   └── pricing.ts     # Cálculo de margem
+├── components/         # Componentes React
 │   ├── AdminDashboard.tsx
-│   ├── AdminOrderDetails.tsx
-│   ├── ManualOrderForm.tsx
-│   ├── CustomerAccount.tsx
+│   ├── CartDrawer.tsx # 🆕 Com cálculo de frete
 │   ├── PaymentForm.tsx
-│   └── StatusComponents.tsx
-├── pages/              # Páginas React
-├── shared/             # Código compartilhado
-│   └── constants/
-│       └── status.ts   # Enums e constantes de status
-├── database/           # Schemas e migrations
-└── docs/              # Documentação
-
+│   └── ...
+├── pages/             # Páginas React
+│   ├── CheckoutPage.tsx # 🆕 Com frete
+│   └── ...
+├── database/          # Schemas e migrations
+│   ├── migration-frete.sql # 🆕
+│   └── migration-markup.sql # 🆕
+└── docs/             # Documentação
 ```
 
 ## Tecnologias
 
 - **Frontend**: React + TypeScript + Vite + TailwindCSS
 - **Backend**: Node.js + Express
+- **Microserviço**: Python 3 (stdlib apenas)
 - **Banco**: PostgreSQL
 - **Pagamentos**: Mercado Pago SDK
 - **UI**: Lucide React (ícones)
+
+## Novidades v2.0
+
+### Sistema de Frete
+- ✅ Microserviço Python independente
+- ✅ Cálculo PAC e SEDEX
+- ✅ Baseado em tabelas dos Correios
+- ✅ Configuração de CEP origem
+- ✅ Seleção de frete no carrinho
+- ✅ Frete salvo no pedido
+
+### Sistema de Margem/Markup
+- ✅ Configuração de margem percentual
+- ✅ Aplicação automática nos preços
+- ✅ Desconto PIX igual à margem
+- ✅ Cálculo inverso correto
 
 ## Suporte
 

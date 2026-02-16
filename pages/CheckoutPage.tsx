@@ -11,6 +11,11 @@ interface CheckoutPageProps {
   cart: CartItem[];
   config: AppConfig;
   onClearCart: () => void;
+  shippingData?: {
+    servico: string;
+    valor: number;
+    prazo: number;
+  } | null;
 }
 
 type Step = 'identification' | 'address' | 'payment' | 'review' | 'confirmation';
@@ -23,7 +28,7 @@ const steps: { id: Step; label: string }[] = [
   { id: 'confirmation', label: 'Confirmação' }
 ];
 
-export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, config, onClearCart }) => {
+export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, config, onClearCart, shippingData = null }) => {
   const navigate = useNavigate();
   const { orderId: urlOrderId } = useParams();
   const [currentStep, setCurrentStep] = useState<Step>(urlOrderId ? 'payment' : 'identification');
@@ -31,6 +36,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
   const [orderId, setOrderId] = useState<number | null>(urlOrderId ? Number(urlOrderId) : null);
   const [paymentData, setPaymentData] = useState<any>(null);
   const [existingOrder, setExistingOrder] = useState<any>(null);
+  const [shipping, setShipping] = useState<{ servico: string; valor: number; prazo: number } | null>(null);
   const [formData, setFormData] = useState({
     cpf: '',
     cep: '',
@@ -43,6 +49,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
   });
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [loadingCEP, setLoadingCEP] = useState(false);
+
+  // Carregar dados do frete do localStorage
+  useEffect(() => {
+    const savedShipping = localStorage.getItem('checkout_shipping');
+    if (savedShipping) {
+      try {
+        setShipping(JSON.parse(savedShipping));
+      } catch (err) {
+        console.error('Erro ao carregar frete:', err);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (customer) {
@@ -209,12 +227,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
               payment_method: paymentMethod,
               payment_id: paymentData?.id || null,
               payment_provider_status: paymentData?.status || null,
-              total: cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
-              items: cart
+              total: totalWithShipping,
+              frete_servico: currentShipping?.servico || null,
+              frete_valor: shippingAmount,
+              frete_prazo: currentShipping?.prazo || null,
+              items: cart.map(item => ({
+                ...item,
+                product_id: item.id,
+                product_name: item.name,
+                product_price: applyMarkup(item.price, config.markupPercentage || 0),
+                product_image: item.image,
+                subtotal: applyMarkup(item.price, config.markupPercentage || 0) * item.quantity
+              }))
             })
           });
           const order = await response.json();
           setOrderId(order.id);
+          localStorage.removeItem('checkout_shipping'); // Limpar frete após criar pedido
           onClearCart();
           navigate(`/pedido/${order.id}`);
         }
@@ -267,6 +296,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
     const finalPrice = applyMarkup(item.price, config.markupPercentage || 0);
     return sum + finalPrice * item.quantity;
   }, 0);
+  const shippingAmount = shipping?.valor || shippingData?.valor || 0;
+  const totalWithShipping = total + shippingAmount;
+  const currentShipping = shipping || shippingData;
   const currentStepIndex = steps.findIndex(s => s.id === currentStep);
   const items = existingOrder ? existingOrder.items : cart;
 
@@ -436,7 +468,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
         <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
           <h2 className="text-2xl font-bold text-white mb-6">Forma de Pagamento</h2>
           <PaymentForm
-            amount={total}
+            amount={totalWithShipping}
+            shippingAmount={shippingAmount}
             customerData={{
               email: customer.email,
               cpf: formData.cpf,
