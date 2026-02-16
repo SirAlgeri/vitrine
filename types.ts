@@ -3,7 +3,8 @@ export interface Product {
   name: string;
   price: number;
   description: string;
-  image: string; // Base64 string
+  image: string; // Base64 string - primeira imagem
+  images?: string[]; // Array de imagens (até 10)
   createdAt: number;
   fields?: { [fieldId: string]: string };
 }

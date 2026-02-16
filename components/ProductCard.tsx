@@ -23,12 +23,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
         onClick={() => onClick(product)}
       >
         {product.image ? (
-          <img 
-            src={product.image} 
-            alt={product.name} 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            loading="lazy"
-          />
+          <>
+            <img 
+              src={product.image} 
+              alt={product.name} 
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              loading="lazy"
+            />
+            
+            {/* Indicador de múltiplas fotos */}
+            {product.images && product.images.length > 1 && (
+              <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                <Eye className="w-3 h-3" />
+                {product.images.length}
+              </div>
+            )}
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-slate-600">
             <span className="text-sm">Sem imagem</span>
