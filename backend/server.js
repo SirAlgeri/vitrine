@@ -450,7 +450,7 @@ app.get('/api/products', async (req, res) => {
     const productsResult = await client.query('SELECT * FROM products ORDER BY created_at DESC');
     const products = productsResult.rows;
     
-    // Load custom fields for each product
+    // Load custom fields and images for each product
     for (const product of products) {
       const fieldsResult = await client.query(
         'SELECT field_id, value FROM product_fields WHERE product_id = $1',
@@ -460,6 +460,13 @@ app.get('/api/products', async (req, res) => {
       fieldsResult.rows.forEach(row => {
         product.fields[row.field_id] = row.value;
       });
+      
+      // Load images
+      const imagesResult = await client.query(
+        'SELECT image FROM product_images WHERE product_id = $1 ORDER BY image_order',
+        [product.id]
+      );
+      product.images = imagesResult.rows.map(row => row.image);
     }
     
     res.json(products);
@@ -488,6 +495,13 @@ app.get('/api/products/:id', async (req, res) => {
       product.fields[row.field_id] = row.value;
     });
     
+    // Load images
+    const imagesResult = await client.query(
+      'SELECT image FROM product_images WHERE product_id = $1 ORDER BY image_order',
+      [product.id]
+    );
+    product.images = imagesResult.rows.map(row => row.image);
+    
     res.json(product);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -501,11 +515,21 @@ app.post('/api/products', async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    const { id, name, price, description, image, fields } = req.body;
+    const { id, name, price, description, image, images, fields } = req.body;
     const result = await client.query(
       'INSERT INTO products (id, name, price, description, image) VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [id, name, price, description, image]
     );
+    
+    // Save multiple images
+    if (images && Array.isArray(images)) {
+      for (let i = 0; i < Math.min(images.length, 10); i++) {
+        await client.query(
+          'INSERT INTO product_images (product_id, image, image_order) VALUES ($1, $2, $3)',
+          [id, images[i], i]
+        );
+      }
+    }
     
     // Save custom fields
     if (fields) {
@@ -534,7 +558,7 @@ app.put('/api/products/:id', async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    const { name, price, description, image, fields } = req.body;
+    const { name, price, description, image, images, fields } = req.body;
     const result = await client.query(
       'UPDATE products SET name = $1, price = $2, description = $3, image = $4 WHERE id = $5 RETURNING *',
       [name, price, description, image, req.params.id]
@@ -543,6 +567,17 @@ app.put('/api/products/:id', async (req, res) => {
     if (result.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Produto não encontrado' });
+    }
+    
+    // Update multiple images
+    if (images && Array.isArray(images)) {
+      await client.query('DELETE FROM product_images WHERE product_id = $1', [req.params.id]);
+      for (let i = 0; i < Math.min(images.length, 10); i++) {
+        await client.query(
+          'INSERT INTO product_images (product_id, image, image_order) VALUES ($1, $2, $3)',
+          [req.params.id, images[i], i]
+        );
+      }
     }
     
     // Delete old custom fields

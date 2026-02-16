@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product, FieldDefinition } from '../types';
-import { X, ShoppingCart } from 'lucide-react';
+import { X, ShoppingCart, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ProductModalProps {
   product: Product | null;
@@ -10,9 +10,13 @@ interface ProductModalProps {
 
 export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, onAddToCart }) => {
   const [fields, setFields] = useState<FieldDefinition[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   useEffect(() => {
-    if (product) loadFields();
+    if (product) {
+      loadFields();
+      setCurrentImageIndex(0);
+    }
   }, [product]);
 
   // Prevent background scroll
@@ -32,6 +36,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, on
 
   if (!product) return null;
 
+  const images = product.images && product.images.length > 0 ? product.images : [product.image];
+  const hasMultipleImages = images.length > 1;
+
+  const nextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const prevImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
       <div 
@@ -50,12 +65,47 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, on
 
         {/* Image Section */}
         <div className="w-full md:w-1/2 bg-black flex items-center justify-center relative">
-          {product.image ? (
-            <img 
-              src={product.image} 
-              alt={product.name} 
-              className="w-full h-full object-contain max-h-[50vh] md:max-h-full"
-            />
+          {images[currentImageIndex] ? (
+            <>
+              <img 
+                src={images[currentImageIndex]} 
+                alt={product.name} 
+                className="w-full h-full object-contain max-h-[50vh] md:max-h-full"
+              />
+              
+              {/* Navegação do carrossel */}
+              {hasMultipleImages && (
+                <>
+                  <button
+                    onClick={prevImage}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white backdrop-blur-md transition-colors"
+                  >
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                  <button
+                    onClick={nextImage}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white backdrop-blur-md transition-colors"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                  
+                  {/* Indicador de posição */}
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
+                    {images.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentImageIndex(index)}
+                        className={`w-2 h-2 rounded-full transition-all ${
+                          index === currentImageIndex 
+                            ? 'bg-white w-6' 
+                            : 'bg-white/50 hover:bg-white/75'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           ) : (
             <div className="text-slate-500">Sem Imagem</div>
           )}
