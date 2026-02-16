@@ -38,6 +38,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, on
 
   const images = product.images && product.images.length > 0 ? product.images : [product.image];
   const hasMultipleImages = images.length > 1;
+  const outOfStock = (product.stock_quantity || 0) === 0;
 
   const nextImage = () => {
     setCurrentImageIndex((prev) => (prev + 1) % images.length);
@@ -154,18 +155,24 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, on
           </div>
 
           <div className="mt-8 pt-6 border-t border-slate-800">
-            <button 
-                className="w-full py-4 rounded-xl font-bold text-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
-                onClick={() => {
-                  onAddToCart(product);
-                  onClose();
-                }}
-            >
-               <ShoppingCart className="w-5 h-5" />
-               Adicionar ao Carrinho
-            </button>
+            {outOfStock ? (
+              <div className="w-full py-4 rounded-xl font-bold text-lg bg-red-600 text-white text-center">
+                FORA DE ESTOQUE
+              </div>
+            ) : (
+              <button 
+                  className="w-full py-4 rounded-xl font-bold text-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                  onClick={() => {
+                    onAddToCart(product);
+                    onClose();
+                  }}
+              >
+                 <ShoppingCart className="w-5 h-5" />
+                 Adicionar ao Carrinho
+              </button>
+            )}
             <p className="text-center text-xs text-slate-500 mt-3">
-              Você poderá escolher como finalizar no carrinho
+              {outOfStock ? 'Produto indisponível no momento' : 'Você poderá escolher como finalizar no carrinho'}
             </p>
           </div>
         </div>

@@ -5,6 +5,7 @@ export interface Product {
   description: string;
   image: string; // Base64 string - primeira imagem
   images?: string[]; // Array de imagens (até 10)
+  stock_quantity?: number; // Quantidade em estoque
   createdAt: number;
   fields?: { [fieldId: string]: string };
 }
