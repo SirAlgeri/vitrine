@@ -48,6 +48,7 @@ export interface AppConfig {
   whatsappNumber?: string;
   logo_url?: string;
   markupPercentage?: number;
+  cepOrigem?: string;
 }
 
 export type ViewState = 'CATALOG' | 'ADMIN_DASHBOARD' | 'PRODUCT_FORM' | 'FIELD_MANAGER' | 'CUSTOMER_ACCOUNT' | 'AUTH';

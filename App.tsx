@@ -50,7 +50,8 @@ const AppContent: React.FC = () => {
           secondaryColor: configData.secondary_color,
           whatsappNumber: configData.whatsapp_number,
           logo_url: configData.logo_url,
-          markupPercentage: configData.markup_percentage || 0
+          markupPercentage: configData.markup_percentage || 0,
+          cepOrigem: configData.cep_origem
         });
       }
     } catch (err) {
@@ -116,7 +117,8 @@ const AppContent: React.FC = () => {
         secondary_color: newConfig.secondaryColor,
         whatsapp_number: newConfig.whatsappNumber,
         logo_url: newConfig.logo_url,
-        markup_percentage: newConfig.markupPercentage
+        markup_percentage: newConfig.markupPercentage,
+        cep_origem: newConfig.cepOrigem
       });
       setConfig(newConfig);
     } catch (err) {

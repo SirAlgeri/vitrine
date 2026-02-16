@@ -374,6 +374,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
                 <button
                   onClick={() => {
+                    // Salvar dados do frete no localStorage
+                    if (freteSelecionado) {
+                      localStorage.setItem('checkout_shipping', JSON.stringify(freteSelecionado));
+                    }
                     onClose();
                     window.location.href = '/checkout';
                   }}

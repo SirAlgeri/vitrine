@@ -212,6 +212,7 @@ export const AdminOrderDetails: React.FC<AdminOrderDetailsProps> = ({ orderId, o
                   )}
                   <div className="flex-1">
                     <p className="font-medium text-white">{item.product_name}</p>
+                    <p className="text-slate-400 text-sm">ID: {item.product_id}</p>
                     <p className="text-slate-400 text-sm">Quantidade: {item.quantity}</p>
                   </div>
                   <div className="text-right">
