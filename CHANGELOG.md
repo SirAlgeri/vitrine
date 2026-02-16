@@ -1,103 +1,94 @@
 # Changelog - Vitrine Pro
 
-Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+## [2.0.0] - 2026-02-10
 
-## [2026-02-09] - Melhorias na Área do Cliente e Pagamentos
+### 🆕 Adicionado
 
-### Corrigido
-- **Campo de endereço na conta do cliente**: Corrigido bug onde o campo `rua` estava sendo usado ao invés de `endereco`, causando dados incompletos na exibição do endereço do cliente
-- **Validação de boleto**: Adicionada validação de dados do cliente antes de gerar boleto, com mensagens de erro claras
+#### Sistema de Frete
+- **Microserviço Python** para cálculo de frete (porta 5001)
+- Cálculo de **PAC e SEDEX** baseado em tabelas dos Correios
+- **Campo CEP de origem** no painel administrativo
+- **UI de cálculo de frete** no carrinho de compras
+- Seleção de opção de frete (PAC/SEDEX) pelo cliente
+- **Armazenamento de frete** no pedido (serviço, valor, prazo)
+- Atualização automática do total com frete selecionado
+- Endpoint `/api/frete/calcular` no backend
+- Serviço frontend `freteService.ts`
+- Campos no banco: `cep_origem`, `frete_servico`, `frete_valor`, `frete_prazo`
 
-### Melhorado
-- **Botão de excluir conta**: Redesenhado para ser mais discreto e menos chamativo
-  - Removido card vermelho "Zona de Perigo"
-  - Removido ícone de lixeira
-  - Removido texto explicativo
-  - Botão pequeno com texto vermelho discreto
-  - Mantém confirmação de segurança ao clicar
+#### Sistema de Margem/Markup
+- **Campo de margem percentual** no painel administrativo (0-100%)
+- Aplicação automática da margem em todos os preços
+- **Desconto PIX** igual à margem configurada
+- Cálculo inverso correto para desconto PIX
+- Serviço `pricing.ts` com funções de cálculo
+- Campo no banco: `markup_percentage`
 
-### Técnico
-- Componente `CustomerAccount.tsx`: Campo `customer.rua` alterado para `customer.endereco`
-- Componente `PaymentForm.tsx`: Adicionada validação de `customerData` antes de processar boleto
-- Melhor tratamento de erros na geração de boleto
+### 🔧 Modificado
 
----
+#### Backend
+- `server.js`: Adicionado endpoint de frete e suporte a margem
+- Comunicação HTTP nativa com microserviço Python
+- Atualização de pedidos para incluir dados de frete
 
-## [2026-02-08] - Sistema de Status e Gestão de Pedidos
+#### Frontend
+- `CartDrawer.tsx`: UI completa de cálculo de frete
+- `CheckoutPage.tsx`: Integração com frete no checkout
+- `AdminDashboard.tsx`: Campos de CEP origem e margem
+- `PaymentForm.tsx`: Cálculo de desconto PIX com margem
+- `ProductCard.tsx`: Aplicação de margem nos preços
+- `App.tsx`: Carregamento de configurações de frete e margem
 
-### Adicionado
-- **Sistema de status padronizado globalmente**
-  - Enums para PaymentStatus e OrderStatus
-  - Mapeamento automático entre status de pagamento e pedido
-  - Histórico completo de mudanças de status
-  - Componentes visuais (StatusBadge, OrderTimeline)
+#### Banco de Dados
+- Tabela `config`: Novos campos `cep_origem` e `markup_percentage`
+- Tabela `orders`: Novos campos `frete_servico`, `frete_valor`, `frete_prazo`
+- Migration `migration-frete.sql`
+- Migration `migration-markup.sql`
 
-- **Registro manual de pedidos**
-  - Formulário completo para admin registrar pedidos manualmente
-  - Busca de produtos por ID ou nome
-  - Criação de clientes inline (apenas nome obrigatório)
-  - Data customizável
-  - Status customizáveis
+### 📚 Documentação
+- Criado `FRETE.md` com documentação completa do sistema de frete
+- Atualizado `README.md` com arquitetura de microserviços
+- Atualizado `frete-service/README.md` com detalhes técnicos
+- Criado `CHANGELOG.md` (este arquivo)
 
-- **Gestão avançada de pedidos**
-  - Edição de status com validação
-  - Campos obrigatórios para envio (tracking code, delivery deadline)
-  - Timeline visual de status
-  - Histórico de mudanças
+### 🏗️ Arquitetura
+- Implementada arquitetura de **microserviços**
+- Separação de responsabilidades:
+  - Python: Cálculo de frete
+  - Node.js: API principal e proxy
+  - React: Interface do usuário
+- Comunicação via HTTP entre serviços
 
-- **Dashboard de vendas aprimorado**
-  - Filtros por data e status
-  - Métricas de faturamento
-  - Integração com registro manual
-  - Visualização detalhada de pedidos
-
-### Modificado
-- **Banco de dados**
-  - Timezone configurado para America/Sao_Paulo (GMT-3)
-  - Email de clientes agora é opcional e não único
-  - Adicionadas colunas: `tracking_code`, `delivery_deadline`
-  - Nova tabela: `order_status_history`
-
-- **Componentes**
-  - `CustomerAccount.tsx`: Usa StatusBadge para exibição consistente
-  - `SalesDashboard.tsx`: Integrado com ManualOrderForm e AdminOrderDetails
-  - `PaymentForm.tsx`: Melhorias na criação de cardForm
-
-### Técnico
-- Arquivo compartilhado: `/shared/constants/status.ts`
-- Backend: `statusManager.js` para gerenciamento centralizado
-- Migrations: `migration-status-standardization.sql`
-- Documentação: `STATUS_PADRONIZACAO.md`
+### ⚡ Performance
+- Cálculo de frete local (< 100ms)
+- Sem dependência de APIs externas
+- Microserviço Python leve (~20MB memória)
 
 ---
 
-## [Anterior] - Funcionalidades Base
+## [1.0.0] - 2026-02-08
 
-### Implementado
-- Catálogo de produtos com busca e filtros
-- Carrinho de compras
-- Checkout com múltiplas formas de pagamento
+### Funcionalidades Iniciais
+- Sistema completo de e-commerce
 - Integração com Mercado Pago (PIX, Cartão, Boleto)
-- Painel administrativo completo
-- Gestão de clientes
-- Área do cliente com histórico
-- Sistema responsivo para mobile
-- Campos customizáveis por produto
-- Configurações visuais da loja
-- Dashboard de vendas
-- Integração com WhatsApp
+- Sistema de status padronizado
+- Painel administrativo
+- Gestão de pedidos e clientes
+- Conta do cliente
+- Registro manual de pedidos
+- Histórico de status
+- Rastreamento de entregas
 
 ---
 
 ## Formato
 
-O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
-e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
+Este changelog segue o formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
-### Tipos de mudanças
-- **Adicionado** para novas funcionalidades
-- **Modificado** para mudanças em funcionalidades existentes
-- **Descontinuado** para funcionalidades que serão removidas
-- **Removido** para funcionalidades removidas
-- **Corrigido** para correção de bugs
-- **Segurança** para vulnerabilidades
+### Tipos de Mudanças
+- `Adicionado` para novas funcionalidades
+- `Modificado` para mudanças em funcionalidades existentes
+- `Depreciado` para funcionalidades que serão removidas
+- `Removido` para funcionalidades removidas
+- `Corrigido` para correções de bugs
+- `Segurança` para vulnerabilidades corrigidas

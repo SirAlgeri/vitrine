@@ -5,6 +5,7 @@ import { getPixPrice } from '../services/pricing';
 
 interface PaymentFormProps {
   amount: number;
+  shippingAmount?: number;
   onSuccess: (paymentData: any) => void;
   onError: (error: string) => void;
   customerData: {
@@ -15,7 +16,7 @@ interface PaymentFormProps {
   markupPercentage?: number;
 }
 
-export default function PaymentForm({ amount, onSuccess, onError, customerData, markupPercentage = 0 }: PaymentFormProps) {
+export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onError, customerData, markupPercentage = 0 }: PaymentFormProps) {
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'pix' | 'boleto'>('pix');
   const [loading, setLoading] = useState(false);
   const [mp, setMp] = useState<any>(null);
@@ -31,7 +32,10 @@ export default function PaymentForm({ amount, onSuccess, onError, customerData, 
   const [installments, setInstallments] = useState(1);
   const [installmentsOptions, setInstallmentsOptions] = useState<any[]>([]);
   
-  const pixAmount = getPixPrice(amount, markupPercentage);
+  // Calcular desconto PIX apenas sobre produtos (sem frete)
+  const productsAmount = amount - shippingAmount;
+  const pixDiscountOnProducts = productsAmount - getPixPrice(productsAmount, markupPercentage);
+  const pixAmount = amount - pixDiscountOnProducts; // Total com frete, desconto só nos produtos
 
   // PIX data
   const [pixQrCode, setPixQrCode] = useState('');

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CartItem, AppConfig, CustomerInfo, ShippingInfo } from '../types';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, CheckCircle, MessageCircle, Truck } from 'lucide-react';
 import { applyMarkup } from '../services/pricing';
+import { calcularFrete } from '../services/freteService';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -40,6 +41,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [shipping, setShipping] = useState<ShippingInfo>({ value: 0, days: 0 });
   const [loadingCep, setLoadingCep] = useState(false);
   const [cpfError, setCpfError] = useState('');
+  const [freteOptions, setFreteOptions] = useState<any[]>([]);
+  const [freteSelecionado, setFreteSelecionado] = useState<any>(null);
+  const [loadingFrete, setLoadingFrete] = useState(false);
+  const [cepFrete, setCepFrete] = useState('');
 
   // Reset step when reopening
   React.useEffect(() => {
@@ -49,12 +54,34 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     }
   }, [isOpen]);
 
+  const handleCalcularFrete = async (cep: string) => {
+    if (!config.cepOrigem) {
+      alert('CEP de origem não configurado');
+      return;
+    }
+    
+    setLoadingFrete(true);
+    try {
+      const opcoes = await calcularFrete(config.cepOrigem, cep);
+      setFreteOptions(opcoes);
+      if (opcoes.length > 0) {
+        setFreteSelecionado(opcoes[0]);
+      }
+    } catch (error) {
+      console.error('Erro ao calcular frete:', error);
+      alert('Erro ao calcular frete. Tente novamente.');
+    } finally {
+      setLoadingFrete(false);
+    }
+  };
+
   const total = cart.reduce((sum, item) => {
     const finalPrice = applyMarkup(item.price, config.markupPercentage || 0);
     return sum + (finalPrice * item.quantity);
   }, 0);
+  const freteValor = freteSelecionado?.valor || 0;
   const subtotal = total;
-  const totalWithShipping = total; // Frete sempre grátis
+  const totalWithShipping = total + freteValor;
 
   const validateCPF = (cpf: string): boolean => {
     const cleanCpf = cpf.replace(/\D/g, '');
@@ -266,6 +293,70 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   })}
                 </div>
               )}
+
+              {/* Cálculo de Frete */}
+              {cart.length > 0 && (
+                <div className="mt-4 p-4 bg-slate-800 rounded-lg border border-slate-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Truck className="w-4 h-4 text-primary" />
+                    <h3 className="font-medium text-white">Calcular Frete</h3>
+                  </div>
+                  
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      placeholder="Digite seu CEP"
+                      maxLength={9}
+                      value={cepFrete}
+                      onChange={(e) => {
+                        const cep = e.target.value.replace(/\D/g, '');
+                        setCepFrete(cep);
+                        if (cep.length === 8) {
+                          handleCalcularFrete(cep);
+                        }
+                      }}
+                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  {loadingFrete && (
+                    <p className="text-slate-400 text-sm">Calculando frete...</p>
+                  )}
+
+                  {freteOptions.length > 0 && !loadingFrete && (
+                    <div className="space-y-2">
+                      {freteOptions.map((opcao, idx) => (
+                        <label
+                          key={idx}
+                          className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                            freteSelecionado?.servico === opcao.servico
+                              ? 'bg-primary/10 border-primary'
+                              : 'bg-slate-900 border-slate-700 hover:border-slate-600'
+                          }`}
+                          onClick={() => setFreteSelecionado(opcao)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="frete"
+                              checked={freteSelecionado?.servico === opcao.servico}
+                              onChange={() => setFreteSelecionado(opcao)}
+                              className="text-primary"
+                            />
+                            <div>
+                              <p className="text-white font-medium text-sm">{opcao.servico}</p>
+                              <p className="text-slate-400 text-xs">Entrega em {opcao.prazo} dias úteis</p>
+                            </div>
+                          </div>
+                          <span className="text-white font-bold">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(opcao.valor)}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
@@ -283,6 +374,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
                 <button
                   onClick={() => {
+                    // Salvar dados do frete no localStorage
+                    if (freteSelecionado) {
+                      localStorage.setItem('checkout_shipping', JSON.stringify(freteSelecionado));
+                    }
                     onClose();
                     window.location.href = '/checkout';
                   }}
@@ -376,12 +471,27 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               </div>
             )}
 
+            {freteValor > 0 && (
+              <div className="space-y-2 mb-4 p-3 bg-slate-800 rounded-lg border border-slate-700">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Subtotal</span>
+                  <span className="text-white">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Frete ({freteSelecionado?.servico})</span>
+                  <span className="text-white">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(freteValor)}
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between mb-4">
               <span className="text-slate-400">Total</span>
               <span className="text-2xl font-bold text-white">
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                  step === 'CHECKOUT' ? totalWithShipping : total
-                )}
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalWithShipping)}
               </span>
             </div>
             
