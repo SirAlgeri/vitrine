@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Mail, Lock } from 'lucide-react';
+import { ChevronLeft, Mail, Lock, Shield } from 'lucide-react';
 import { CustomerRegister } from '../types';
 import { customerAuth } from '../services/customerAuth';
 import { api } from '../services/api';
@@ -11,9 +11,11 @@ interface UnifiedAuthProps {
 }
 
 export const UnifiedAuth: React.FC<UnifiedAuthProps> = ({ onBack, onCustomerSuccess, onAdminSuccess }) => {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'verify'>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [emailToVerify, setEmailToVerify] = useState('');
   
   const [loginData, setLoginData] = useState({ email: '', senha: '' });
   const [registerData, setRegisterData] = useState<CustomerRegister>({
@@ -59,7 +61,46 @@ export const UnifiedAuth: React.FC<UnifiedAuthProps> = ({ onBack, onCustomerSucc
     
     setLoading(true);
     try {
-      const customer = await customerAuth.register(registerData);
+      // Enviar código de verificação
+      const res = await fetch('http://localhost:3001/api/customers/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: registerData.email })
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Erro ao enviar código');
+      }
+      
+      setEmailToVerify(registerData.email);
+      setMode('verify');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      // Verificar código
+      const verifyRes = await fetch('http://localhost:3001/api/customers/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailToVerify, code: verificationCode })
+      });
+      
+      if (!verifyRes.ok) {
+        const data = await verifyRes.json();
+        throw new Error(data.error || 'Código inválido');
+      }
+      
+      // Registrar cliente
+      const customer = await customerAuth.register({ ...registerData, email_verified: true });
       customerAuth.saveSession(customer);
       onCustomerSuccess();
     } catch (err: any) {
@@ -72,36 +113,38 @@ export const UnifiedAuth: React.FC<UnifiedAuthProps> = ({ onBack, onCustomerSucc
   return (
     <div className="max-w-md mx-auto animate-fade-in py-8">
       <div className="bg-slate-900 rounded-2xl shadow-2xl border border-slate-700 p-6">
-        <div className="flex mb-6 bg-slate-800 rounded-xl p-1">
-          <button
-            onClick={() => setMode('login')}
-            style={{
-              backgroundColor: mode === 'login' ? 'var(--primary)' : 'transparent'
-            }}
-            className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-              mode === 'login' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Fazer Login
-          </button>
-          <button
-            onClick={() => setMode('register')}
-            style={{
-              backgroundColor: mode === 'register' ? 'var(--primary)' : 'transparent'
-            }}
-            className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-              mode === 'register' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Criar Conta
-          </button>
-        </div>
+        {mode !== 'verify' && (
+          <div className="flex mb-6 bg-slate-800 rounded-xl p-1">
+            <button
+              onClick={() => setMode('login')}
+              style={{
+                backgroundColor: mode === 'login' ? 'var(--primary)' : 'transparent'
+              }}
+              className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                mode === 'login' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Fazer Login
+            </button>
+            <button
+              onClick={() => setMode('register')}
+              style={{
+                backgroundColor: mode === 'register' ? 'var(--primary)' : 'transparent'
+              }}
+              className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                mode === 'register' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Criar Conta
+            </button>
+          </div>
+        )}
 
         <h2 className="text-2xl font-bold text-white mb-2">
-          {mode === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}
+          {mode === 'login' ? 'Bem-vindo de volta' : mode === 'register' ? 'Crie sua conta' : 'Verificar Email'}
         </h2>
         <p className="text-slate-400 text-sm mb-6">
-          {mode === 'login' ? 'Acesse sua conta' : 'Cadastre-se para fazer pedidos'}
+          {mode === 'login' ? 'Acesse sua conta' : mode === 'register' ? 'Cadastre-se para fazer pedidos' : 'Digite o código enviado para seu email'}
         </p>
 
         {error && (
@@ -110,7 +153,48 @@ export const UnifiedAuth: React.FC<UnifiedAuthProps> = ({ onBack, onCustomerSucc
           </div>
         )}
 
-        {mode === 'login' ? (
+        {mode === 'verify' ? (
+          <form onSubmit={handleVerifyCode} className="space-y-4">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/20 rounded-full mb-4">
+                <Shield className="w-8 h-8 text-primary" />
+              </div>
+              <p className="text-slate-300 text-sm">
+                Enviamos um código de 6 dígitos para<br />
+                <strong className="text-white">{emailToVerify}</strong>
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-2">Código de Verificação</label>
+              <input
+                type="text"
+                required
+                maxLength={6}
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="000000"
+                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white text-center text-2xl tracking-widest font-mono focus:outline-none focus:border-primary"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || verificationCode.length !== 6}
+              className="w-full py-3 bg-primary hover:bg-blue-600 text-white rounded-lg font-medium disabled:opacity-50"
+            >
+              {loading ? 'Verificando...' : 'Verificar e Criar Conta'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setMode('register'); setVerificationCode(''); setError(''); }}
+              className="w-full py-2 text-slate-400 hover:text-white text-sm"
+            >
+              Voltar
+            </button>
+          </form>
+        ) : mode === 'login' ? (
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">Email</label>
