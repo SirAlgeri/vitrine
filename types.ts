@@ -97,7 +97,14 @@ export interface CustomerRegister {
   email: string;
   senha: string;
   telefone: string;
+  cep?: string;
+  rua?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
   aceita_marketing?: boolean;
+  email_verified?: boolean;
 }
 
 export interface CustomerLogin {

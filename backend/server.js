@@ -14,7 +14,7 @@ import {
   updateOrderStatus,
   updateOrderStatusManual 
 } from './statusManager.js';
-import { sendOrderStatusEmail } from './emailService.js';
+import { sendOrderStatusEmail, sendVerificationEmail } from './emailService.js';
 
 dotenv.config();
 
@@ -190,9 +190,83 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // ========== CUSTOMER AUTH ==========
+
+// Gerar e enviar código de verificação
+app.post('/api/customers/send-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Verificar se email já está cadastrado
+    const existing = await pool.query('SELECT id FROM customers WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Email já cadastrado' });
+    }
+    
+    // Gerar código de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    
+    // Salvar código no banco
+    await pool.query(
+      'INSERT INTO email_verifications (email, code, expires_at) VALUES ($1, $2, $3)',
+      [email, code, expiresAt]
+    );
+    
+    // Buscar config para personalizar email
+    const configResult = await pool.query('SELECT * FROM config LIMIT 1');
+    const config = configResult.rows[0] || {};
+    
+    // Enviar email
+    const emailResult = await sendVerificationEmail(email, code, config);
+    
+    if (!emailResult.success) {
+      return res.status(500).json({ error: 'Erro ao enviar email' });
+    }
+    
+    res.json({ success: true, message: 'Código enviado para o email' });
+  } catch (err) {
+    console.error('Erro ao enviar verificação:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Verificar código
+app.post('/api/customers/verify-code', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    
+    const result = await pool.query(
+      `SELECT * FROM email_verifications 
+       WHERE email = $1 AND code = $2 AND verified = FALSE AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      [email, code]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Código inválido ou expirado' });
+    }
+    
+    // Marcar como verificado
+    await pool.query(
+      'UPDATE email_verifications SET verified = TRUE WHERE id = $1',
+      [result.rows[0].id]
+    );
+    
+    res.json({ success: true, message: 'Email verificado com sucesso' });
+  } catch (err) {
+    console.error('Erro ao verificar código:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/customers/register', async (req, res) => {
   try {
-    const { nome_completo, email, senha, telefone, aceita_marketing } = req.body;
+    const { nome_completo, email, senha, telefone, aceita_marketing, email_verified } = req.body;
+    
+    // Verificar se email foi verificado
+    if (!email_verified) {
+      return res.status(400).json({ error: 'Email não verificado' });
+    }
     
     const existing = await pool.query('SELECT id FROM customers WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
@@ -203,8 +277,8 @@ app.post('/api/customers/register', async (req, res) => {
     const senha_hash = await bcrypt.hash(senha, 10);
     
     const result = await pool.query(
-      `INSERT INTO customers (id, nome_completo, email, senha_hash, telefone, aceita_marketing)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome_completo, email, telefone, aceita_marketing, status, criado_em`,
+      `INSERT INTO customers (id, nome_completo, email, senha_hash, telefone, aceita_marketing, email_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, nome_completo, email, telefone, aceita_marketing, status, criado_em, email_verified`,
       [id, nome_completo, email, senha_hash, telefone, aceita_marketing || false]
     );
     

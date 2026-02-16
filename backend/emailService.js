@@ -201,3 +201,59 @@ export async function sendOrderStatusEmail(order, newStatus, config = {}) {
 
   return await sendEmail(order.customer_email, subject, htmlBody);
 }
+
+export async function sendVerificationEmail(email, code, config = {}) {
+  const storeName = config.store_name || 'VitrinePro';
+  const primaryColor = config.primary_color || '#3b82f6';
+  
+  const subject = `Código de Verificação - ${storeName}`;
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background: ${primaryColor}; padding: 40px 20px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Verificação de Email</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px 30px; text-align: center;">
+              <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 30px;">
+                Use o código abaixo para verificar seu email:
+              </p>
+              <div style="background: #f8f9fa; border: 2px dashed ${primaryColor}; border-radius: 8px; padding: 20px; margin: 0 0 30px;">
+                <p style="margin: 0; color: ${primaryColor}; font-size: 36px; font-weight: bold; letter-spacing: 8px; font-family: monospace;">
+                  ${code}
+                </p>
+              </div>
+              <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 0;">
+                Este código expira em <strong>10 minutos</strong>.<br>
+                Se você não solicitou este código, ignore este email.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e0e0e0;">
+              <p style="margin: 0; color: #999999; font-size: 12px;">
+                © ${new Date().getFullYear()} ${storeName}. Todos os direitos reservados.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  return await sendEmail(email, subject, htmlBody);
+}
