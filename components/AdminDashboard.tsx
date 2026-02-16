@@ -212,30 +212,249 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Margem aplicada sobre o preço base. PIX terá desconto igual à margem. (0% a 100%)
               </p>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">Cor Principal (Destaque)</label>
-              <div className="flex gap-3 items-center">
-                <input
-                  type="color"
-                  value={tempConfig.primaryColor}
-                  onChange={(e) => setTempConfig({...tempConfig, primaryColor: e.target.value})}
-                  className="w-12 h-12 rounded-lg cursor-pointer bg-transparent border-none p-0"
-                />
-                <span className="text-slate-300 font-mono text-sm">{tempConfig.primaryColor}</span>
+
+            {/* Cores do Tema */}
+            <div className="md:col-span-2 mt-4 pt-4 border-t border-slate-700">
+              <h4 className="text-sm font-semibold text-slate-300 mb-4">🎨 Personalização de Cores</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Cor Principal (Destaque)</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.primaryColor}
+                      onChange={(e) => setTempConfig({...tempConfig, primaryColor: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.primaryColor}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Cor Secundária</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.secondaryColor}
+                      onChange={(e) => setTempConfig({...tempConfig, secondaryColor: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.secondaryColor}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Fundo</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.background_color || '#0f172a'}
+                      onChange={(e) => setTempConfig({...tempConfig, background_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.background_color || '#0f172a'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Cards</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.card_color || '#1e293b'}
+                      onChange={(e) => setTempConfig({...tempConfig, card_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.card_color || '#1e293b'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Superfície</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.surface_color || '#334155'}
+                      onChange={(e) => setTempConfig({...tempConfig, surface_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.surface_color || '#334155'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Texto Principal</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.text_primary_color || '#ffffff'}
+                      onChange={(e) => setTempConfig({...tempConfig, text_primary_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.text_primary_color || '#ffffff'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Texto Secundário</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.text_secondary_color || '#94a3b8'}
+                      onChange={(e) => setTempConfig({...tempConfig, text_secondary_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.text_secondary_color || '#94a3b8'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Bordas</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.border_color || '#475569'}
+                      onChange={(e) => setTempConfig({...tempConfig, border_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.border_color || '#475569'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Botão Primário</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.button_primary_color || '#3b82f6'}
+                      onChange={(e) => setTempConfig({...tempConfig, button_primary_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.button_primary_color || '#3b82f6'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Botão Primário Hover</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.button_primary_hover_color || '#2563eb'}
+                      onChange={(e) => setTempConfig({...tempConfig, button_primary_hover_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.button_primary_hover_color || '#2563eb'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Botão Secundário</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.button_secondary_color || '#64748b'}
+                      onChange={(e) => setTempConfig({...tempConfig, button_secondary_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.button_secondary_color || '#64748b'}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-slate-400 mb-2">Botão Secundário Hover</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={tempConfig.button_secondary_hover_color || '#475569'}
+                      onChange={(e) => setTempConfig({...tempConfig, button_secondary_hover_color: e.target.value})}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-mono text-slate-400">{tempConfig.button_secondary_hover_color || '#475569'}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-2">Cor Secundária</label>
-              <div className="flex gap-3 items-center">
-                <input
-                  type="color"
-                  value={tempConfig.secondaryColor}
-                  onChange={(e) => setTempConfig({...tempConfig, secondaryColor: e.target.value})}
-                  className="w-12 h-12 rounded-lg cursor-pointer bg-transparent border-none p-0"
-                />
-                <span className="text-slate-300 font-mono text-sm">{tempConfig.secondaryColor}</span>
+            {/* Preview das Cores */}
+            <div className="md:col-span-2 mt-6 pt-6 border-t border-slate-700">
+              <h4 className="text-sm font-semibold text-slate-300 mb-4">👁️ Preview das Cores</h4>
+              <div 
+                className="rounded-lg p-6 space-y-4"
+                style={{ backgroundColor: tempConfig.background_color || '#0f172a' }}
+              >
+                {/* Card de Produto */}
+                <div 
+                  className="rounded-lg p-4 border"
+                  style={{ 
+                    backgroundColor: tempConfig.card_color || '#1e293b',
+                    borderColor: tempConfig.border_color || '#475569'
+                  }}
+                >
+                  <h3 
+                    className="font-semibold text-lg mb-2"
+                    style={{ color: tempConfig.text_primary_color || '#ffffff' }}
+                  >
+                    Produto Exemplo
+                  </h3>
+                  <p 
+                    className="text-sm mb-3"
+                    style={{ color: tempConfig.text_secondary_color || '#94a3b8' }}
+                  >
+                    Descrição do produto com texto secundário
+                  </p>
+                  
+                  {/* Input Example */}
+                  <div 
+                    className="rounded px-3 py-2 mb-3 text-sm"
+                    style={{ 
+                      backgroundColor: tempConfig.surface_color || '#334155',
+                      color: tempConfig.text_primary_color || '#ffffff',
+                      border: `1px solid ${tempConfig.border_color || '#475569'}`
+                    }}
+                  >
+                    Campo de entrada (superfície)
+                  </div>
+
+                  {/* Botões */}
+                  <div className="flex gap-2">
+                    <button
+                      className="px-4 py-2 rounded text-white text-sm font-medium transition-colors"
+                      style={{ 
+                        backgroundColor: tempConfig.button_primary_color || '#3b82f6'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = tempConfig.button_primary_hover_color || '#2563eb'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = tempConfig.button_primary_color || '#3b82f6'}
+                    >
+                      Botão Primário
+                    </button>
+                    <button
+                      className="px-4 py-2 rounded text-white text-sm font-medium transition-colors"
+                      style={{ 
+                        backgroundColor: tempConfig.button_secondary_color || '#64748b'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = tempConfig.button_secondary_hover_color || '#475569'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = tempConfig.button_secondary_color || '#64748b'}
+                    >
+                      Botão Secundário
+                    </button>
+                  </div>
+                </div>
+
+                {/* Badge com cores principais */}
+                <div className="flex gap-2">
+                  <span 
+                    className="px-3 py-1 rounded-full text-xs font-medium text-white"
+                    style={{ backgroundColor: tempConfig.primaryColor }}
+                  >
+                    Cor Principal
+                  </span>
+                  <span 
+                    className="px-3 py-1 rounded-full text-xs font-medium text-white"
+                    style={{ backgroundColor: tempConfig.secondaryColor }}
+                  >
+                    Cor Secundária
+                  </span>
+                </div>
               </div>
             </div>
           </div>

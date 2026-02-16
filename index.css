@@ -1,6 +1,18 @@
 :root {
   --primary: #3b82f6;
   --secondary: #8b5cf6;
+  
+  /* Cores customizáveis */
+  --color-background: #0f172a;
+  --color-card: #1e293b;
+  --color-surface: #334155;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #94a3b8;
+  --color-border: #475569;
+  --color-button-primary: #3b82f6;
+  --color-button-primary-hover: #2563eb;
+  --color-button-secondary: #64748b;
+  --color-button-secondary-hover: #475569;
 }
 
 * {
@@ -11,9 +23,62 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: #0f172a;
-  color: #f1f5f9;
+  background-color: var(--color-background) !important;
+  color: var(--color-text-primary) !important;
 }
+
+/* Sobrescrever cores do Tailwind com variáveis customizáveis */
+.bg-slate-900, 
+.bg-slate-900\/80, 
+.bg-slate-900\/50 { 
+  background-color: var(--color-background) !important; 
+}
+
+.bg-slate-800 { 
+  background-color: var(--color-card) !important; 
+}
+
+.bg-slate-700 { 
+  background-color: var(--color-surface) !important; 
+}
+
+/* Hovers escurecem/clareiam automaticamente */
+.hover\:bg-slate-800:hover,
+.hover\:bg-slate-700:hover { 
+  filter: brightness(1.15) !important;
+}
+
+.border-slate-800, 
+.border-slate-700,
+.border-l.border-slate-800,
+.border-b.border-slate-800 { 
+  border-color: var(--color-border) !important; 
+}
+
+.text-slate-100, 
+.text-slate-200, 
+.text-white:not(.bg-green-600):not(.bg-red-600):not(.bg-yellow-600):not(.bg-blue-600) { 
+  color: var(--color-text-primary) !important; 
+}
+
+.text-slate-300, 
+.text-slate-400, 
+.text-slate-500,
+.hover\:text-white:hover { 
+  color: var(--color-text-secondary) !important; 
+}
+
+/* Classes utilitárias para cores customizáveis */
+.bg-custom-background { background-color: var(--color-background); }
+.bg-custom-card { background-color: var(--color-card); }
+.bg-custom-surface { background-color: var(--color-surface); }
+.text-custom-primary { color: var(--color-text-primary); }
+.text-custom-secondary { color: var(--color-text-secondary); }
+.border-custom { border-color: var(--color-border); }
+.bg-custom-btn-primary { background-color: var(--color-button-primary); }
+.hover\:bg-custom-btn-primary-hover:hover { background-color: var(--color-button-primary-hover); }
+.bg-custom-btn-secondary { background-color: var(--color-button-secondary); }
+.hover\:bg-custom-btn-secondary-hover:hover { background-color: var(--color-button-secondary-hover); }
 
 /* Mercado Pago SDK Styles */
 #form-checkout__cardNumber,

@@ -49,6 +49,16 @@ export interface AppConfig {
   logo_url?: string;
   markupPercentage?: number;
   cepOrigem?: string;
+  background_color?: string;
+  card_color?: string;
+  surface_color?: string;
+  text_primary_color?: string;
+  text_secondary_color?: string;
+  border_color?: string;
+  button_primary_color?: string;
+  button_primary_hover_color?: string;
+  button_secondary_color?: string;
+  button_secondary_hover_color?: string;
 }
 
 export type ViewState = 'CATALOG' | 'ADMIN_DASHBOARD' | 'PRODUCT_FORM' | 'FIELD_MANAGER' | 'CUSTOMER_ACCOUNT' | 'AUTH';

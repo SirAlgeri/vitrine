@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { CartDrawer } from './components/CartDrawer';
+import { ThemeProvider } from './components/ThemeProvider';
 import { Home } from './pages/Home';
 import { AuthPage } from './pages/AuthPage';
 import { AdminPage } from './pages/AdminPage';
@@ -51,7 +52,17 @@ const AppContent: React.FC = () => {
           whatsappNumber: configData.whatsapp_number,
           logo_url: configData.logo_url,
           markupPercentage: configData.markup_percentage || 0,
-          cepOrigem: configData.cep_origem
+          cepOrigem: configData.cep_origem,
+          background_color: configData.background_color,
+          card_color: configData.card_color,
+          surface_color: configData.surface_color,
+          text_primary_color: configData.text_primary_color,
+          text_secondary_color: configData.text_secondary_color,
+          border_color: configData.border_color,
+          button_primary_color: configData.button_primary_color,
+          button_primary_hover_color: configData.button_primary_hover_color,
+          button_secondary_color: configData.button_secondary_color,
+          button_secondary_hover_color: configData.button_secondary_hover_color
         });
       }
     } catch (err) {
@@ -118,7 +129,17 @@ const AppContent: React.FC = () => {
         whatsapp_number: newConfig.whatsappNumber,
         logo_url: newConfig.logo_url,
         markup_percentage: newConfig.markupPercentage,
-        cep_origem: newConfig.cepOrigem
+        cep_origem: newConfig.cepOrigem,
+        background_color: newConfig.background_color,
+        card_color: newConfig.card_color,
+        surface_color: newConfig.surface_color,
+        text_primary_color: newConfig.text_primary_color,
+        text_secondary_color: newConfig.text_secondary_color,
+        border_color: newConfig.border_color,
+        button_primary_color: newConfig.button_primary_color,
+        button_primary_hover_color: newConfig.button_primary_hover_color,
+        button_secondary_color: newConfig.button_secondary_color,
+        button_secondary_hover_color: newConfig.button_secondary_hover_color
       });
       setConfig(newConfig);
     } catch (err) {
@@ -130,6 +151,7 @@ const AppContent: React.FC = () => {
 
   return (
     <>
+      <ThemeProvider config={config} />
       <Layout 
         config={config} 
         isAuthenticated={isAuthenticated}
