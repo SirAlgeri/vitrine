@@ -51,7 +51,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onClose, o
     setLoading(true);
     try {
       // Enviar código de verificação
-      const res = await fetch('http://localhost:3001/api/customers/send-verification', {
+      const res = await fetch('/api/customers/send-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: registerData.email })
@@ -77,7 +77,7 @@ export const CustomerAuthModal: React.FC<CustomerAuthModalProps> = ({ onClose, o
     setLoading(true);
     try {
       // Verificar código
-      const verifyRes = await fetch('http://localhost:3001/api/customers/verify-code', {
+      const verifyRes = await fetch('/api/customers/verify-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailToVerify, code: verificationCode })

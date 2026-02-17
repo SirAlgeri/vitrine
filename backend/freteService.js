@@ -9,7 +9,7 @@ export async function calcularFrete(params) {
   } = params;
 
   try {
-    const response = await fetch('http://localhost:5001/calcular', {
+    const response = await fetch('https://7dwqzuotfn7yyfhokzrjz465rm0lcvlu.lambda-url.us-east-1.on.aws/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

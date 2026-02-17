@@ -119,44 +119,25 @@ app.put('/api/config', async (req, res) => {
 app.post('/api/frete/calcular', async (req, res) => {
   try {
     const { cepOrigem, cepDestino, peso, comprimento, altura, largura } = req.body;
-    
-    const postData = JSON.stringify({
-      cepOrigem,
-      cepDestino,
-      peso: peso || 0.3,
-      comprimento: comprimento || 16,
-      altura: altura || 2,
-      largura: largura || 11
-    });
 
-    const options = {
-      hostname: 'localhost',
-      port: 5001,
-      path: '/calcular',
+    const response = await fetch('https://7dwqzuotfn7yyfhokzrjz465rm0lcvlu.lambda-url.us-east-1.on.aws/', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-
-    const resultado = await new Promise((resolve, reject) => {
-      const req = http.request(options, (response) => {
-        let data = '';
-        response.on('data', (chunk) => { data += chunk; });
-        response.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(new Error('Resposta inválida do serviço de frete'));
-          }
-        });
-      });
-      req.on('error', reject);
-      req.write(postData);
-      req.end();
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cepOrigem,
+        cepDestino,
+        peso: peso || 0.3,
+        comprimento: comprimento || 16,
+        altura: altura || 2,
+        largura: largura || 11
+      })
     });
 
+    if (!response.ok) {
+      throw new Error('Erro ao calcular frete');
+    }
+
+    const resultado = await response.json();
     res.json(resultado);
   } catch (err) {
     console.error('Erro ao calcular frete:', err);

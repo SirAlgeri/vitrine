@@ -1,6 +1,6 @@
 import { Customer, CustomerRegister, CustomerLogin } from '../types';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 export const customerAuth = {
   register: async (data: CustomerRegister): Promise<Customer> => {

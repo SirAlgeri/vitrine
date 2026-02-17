@@ -29,7 +29,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({ product, onClose, on
   }, [product]);
 
   const loadFields = async () => {
-    const res = await fetch('http://localhost:3001/api/field-definitions');
+    const res = await fetch('/api/field-definitions');
     const data = await res.json();
     setFields(data.filter((f: FieldDefinition) => !f.is_default));
   };
