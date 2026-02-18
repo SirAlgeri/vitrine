@@ -8,3 +8,6 @@ backend/.env
 backend/.env.backup
 backend/.env.swp
 **/*.bak
+backend/.env.backup
+backend/.env.swp
+**/*.bak
