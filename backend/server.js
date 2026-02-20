@@ -185,12 +185,15 @@ app.post('/api/frete/calcular', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    // Accept both username and email (for backwards compatibility)
-    const emailOrUsername = username;
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [emailOrUsername]);
+    
+    // Buscar usuário do tenant atual
+    const result = await pool.query(
+      'SELECT * FROM users WHERE username = $1 AND tenant_id = $2', 
+      [username, req.tenant.id]
+    );
     
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Credenciais inválidas' });
+      return res.status(401).json({ error: 'Credenciais inválidas para este tenant' });
     }
 
     const user = result.rows[0];
@@ -200,7 +203,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
-    res.json({ success: true, username: user.username });
+    res.json({ success: true, username: user.username, tenant_id: user.tenant_id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
