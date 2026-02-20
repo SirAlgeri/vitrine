@@ -1059,14 +1059,7 @@ app.put('/api/orders/:id/status', async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
-    }
-    
-    res.json(result);
-  } catch (err) {
-    console.error('❌ ERRO ao atualizar status:', err);
-    res.status(400).json({ error: err.message });
-  }
-});
+
 
 // Atualizar pagamento do pedido
 app.put('/api/orders/:id/payment', async (req, res) => {
