@@ -547,8 +547,8 @@ app.get('/api/products', async (req, res) => {
     // Load custom fields and images for each product
     for (const product of products) {
       const fieldsResult = await client.query(
-        'SELECT field_id, value FROM product_fields WHERE product_id = $1',
-        [product.id]
+        'SELECT field_id, value FROM product_fields WHERE product_id = $1 AND tenant_id = $2',
+        [product.id, req.tenant.id]
       );
       product.fields = {};
       fieldsResult.rows.forEach(row => {
@@ -557,7 +557,8 @@ app.get('/api/products', async (req, res) => {
       
       // Load images
       const imagesResult = await client.query(
-        'SELECT image FROM product_images WHERE product_id = $1 ORDER BY image_order',
+        'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
+        [product.id, req.tenant.id]
         [product.id]
       );
       product.images = imagesResult.rows.map(row => row.image);
@@ -581,8 +582,8 @@ app.get('/api/products/:id', async (req, res) => {
     
     const product = result.rows[0];
     const fieldsResult = await client.query(
-      'SELECT field_id, value FROM product_fields WHERE product_id = $1',
-      [product.id]
+      'SELECT field_id, value FROM product_fields WHERE product_id = $1 AND tenant_id = $2',
+      [product.id, req.tenant.id]
     );
     product.fields = {};
     fieldsResult.rows.forEach(row => {
@@ -591,7 +592,8 @@ app.get('/api/products/:id', async (req, res) => {
     
     // Load images
     const imagesResult = await client.query(
-      'SELECT image FROM product_images WHERE product_id = $1 ORDER BY image_order',
+      'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
+      [product.id, req.tenant.id]
       [product.id]
     );
     product.images = imagesResult.rows.map(row => row.image);
@@ -714,7 +716,7 @@ app.delete('/api/products/:id', async (req, res) => {
 // ========== FIELD DEFINITIONS ==========
 app.get('/api/field-definitions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM field_definitions ORDER BY field_order');
+    const result = await pool.query('SELECT * FROM field_definitions WHERE tenant_id = $1 ORDER BY field_order', [req.tenant.id]);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
