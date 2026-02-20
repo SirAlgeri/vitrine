@@ -5,9 +5,5 @@ dist/
 .vite/
 backend/node_modules/
 backend/.env
-backend/.env.backup
 backend/.env.swp
-**/*.bak
-backend/.env.backup
-backend/.env.swp
-**/*.bak
+**/.env.swp
