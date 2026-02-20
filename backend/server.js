@@ -121,8 +121,9 @@ app.put('/api/config', async (req, res) => {
       return res.status(400).json({ error: 'Nenhum campo para atualizar' });
     }
     
+    values.push(req.tenant.id);
     const result = await pool.query(
-      `UPDATE config SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = 1 RETURNING *`,
+      `UPDATE config SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = $${paramCount} RETURNING *`,
       values
     );
     res.json(result.rows[0]);
@@ -213,7 +214,7 @@ app.post('/api/customers/send-verification', async (req, res) => {
     const { email } = req.body;
     
     // Verificar se email já está cadastrado
-    const existing = await pool.query('SELECT id FROM customers WHERE email = $1', [email]);
+    const existing = await pool.query('SELECT id FROM customers WHERE email = $1 AND tenant_id = $2', [email, req.tenant.id]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
@@ -224,12 +225,12 @@ app.post('/api/customers/send-verification', async (req, res) => {
     
     // Salvar código no banco
     await pool.query(
-      'INSERT INTO email_verifications (email, code, expires_at) VALUES ($1, $2, $3)',
-      [email, code, expiresAt]
+      'INSERT INTO email_verifications (email, code, expires_at, tenant_id) VALUES ($1, $2, $3, $4)',
+      [email, code, expiresAt, req.tenant.id]
     );
     
     // Buscar config para personalizar email
-    const configResult = await pool.query('SELECT * FROM config LIMIT 1');
+    const configResult = await pool.query('SELECT * FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id]);
     const config = configResult.rows[0] || {};
     
     // Enviar email
@@ -253,9 +254,9 @@ app.post('/api/customers/verify-code', async (req, res) => {
     
     const result = await pool.query(
       `SELECT * FROM email_verifications 
-       WHERE email = $1 AND code = $2 AND verified = FALSE AND expires_at > NOW()
+       WHERE email = $1 AND code = $2 AND verified = FALSE AND expires_at > NOW() AND tenant_id = $3
        ORDER BY created_at DESC LIMIT 1`,
-      [email, code]
+      [email, code, req.tenant.id]
     );
     
     if (result.rows.length === 0) {
@@ -284,7 +285,7 @@ app.post('/api/customers/register', async (req, res) => {
       return res.status(400).json({ error: 'Email não verificado' });
     }
     
-    const existing = await pool.query('SELECT id FROM customers WHERE email = $1', [email]);
+    const existing = await pool.query('SELECT id FROM customers WHERE email = $1 AND tenant_id = $2', [email, req.tenant.id]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
@@ -293,9 +294,9 @@ app.post('/api/customers/register', async (req, res) => {
     const senha_hash = await bcrypt.hash(senha, 10);
     
     const result = await pool.query(
-      `INSERT INTO customers (id, nome_completo, email, senha_hash, telefone, aceita_marketing, email_verified)
-       VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING id, nome_completo, email, telefone, aceita_marketing, status, criado_em, email_verified`,
-      [id, nome_completo, email, senha_hash, telefone, aceita_marketing || false]
+      `INSERT INTO customers (id, nome_completo, email, senha_hash, telefone, aceita_marketing, email_verified, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7) RETURNING id, nome_completo, email, telefone, aceita_marketing, status, criado_em, email_verified`,
+      [id, nome_completo, email, senha_hash, telefone, aceita_marketing || false, req.tenant.id]
     );
     
     res.status(201).json({ customer: result.rows[0] });
@@ -308,7 +309,7 @@ app.post('/api/customers/login', async (req, res) => {
   try {
     const { email, senha } = req.body;
     
-    const result = await pool.query('SELECT * FROM customers WHERE email = $1 AND deletado_em IS NULL', [email]);
+    const result = await pool.query('SELECT * FROM customers WHERE email = $1 AND deletado_em IS NULL AND tenant_id = $2', [email, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Email ou senha inválidos' });
     }
@@ -329,7 +330,7 @@ app.post('/api/customers/login', async (req, res) => {
     }
     
     // Update last login
-    await pool.query('UPDATE customers SET ultimo_login_em = CURRENT_TIMESTAMP WHERE id = $1', [customer.id]);
+    await pool.query('UPDATE customers SET ultimo_login_em = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2', [customer.id, req.tenant.id]);
     
     delete customer.senha_hash;
     res.json({ customer });
@@ -355,10 +356,10 @@ app.post('/api/customers', async (req, res) => {
     const { nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado } = req.body;
     
     const result = await pool.query(
-      `INSERT INTO customers (id, nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado, status, senha_hash)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ativo', '')
+      `INSERT INTO customers (id, nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado, status, senha_hash, tenant_id)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ativo', '', $12)
        RETURNING id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado`,
-      [nome_completo, telefone || '', cpf || null, email || null, cep || null, endereco || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null]
+      [nome_completo, telefone || '', cpf || null, email || null, cep || null, endereco || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null, req.tenant.id]
     );
     
     res.status(201).json(result.rows[0]);
@@ -390,9 +391,9 @@ app.put('/api/customers/:id', async (req, res) => {
     
     const result = await pool.query(
       `UPDATE customers SET nome_completo = $1, telefone = $2, cpf = $3, cep = $4, endereco = $5, numero = $6, complemento = $7, bairro = $8, cidade = $9, estado = $10, aceita_marketing = $11
-       WHERE id = $12 AND deletado_em IS NULL
+       WHERE id = $12 AND deletado_em IS NULL AND tenant_id = $13
        RETURNING id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, status, criado_em, ultimo_login_em`,
-      [nome_completo, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, req.params.id]
+      [nome_completo, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, req.params.id, req.tenant.id]
     );
     
     if (result.rows.length === 0) {
@@ -409,7 +410,7 @@ app.put('/api/customers/:id/password', async (req, res) => {
   try {
     const { senha_atual, senha_nova } = req.body;
     
-    const result = await pool.query('SELECT senha_hash FROM customers WHERE id = $1 AND deletado_em IS NULL', [req.params.id]);
+    const result = await pool.query('SELECT senha_hash FROM customers WHERE id = $1 AND deletado_em IS NULL AND tenant_id = $2', [req.params.id, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
@@ -420,7 +421,7 @@ app.put('/api/customers/:id/password', async (req, res) => {
     }
     
     const senha_hash = await bcrypt.hash(senha_nova, 10);
-    await pool.query('UPDATE customers SET senha_hash = $1 WHERE id = $2', [senha_hash, req.params.id]);
+    await pool.query('UPDATE customers SET senha_hash = $1 WHERE id = $2 AND tenant_id = $3', [senha_hash, req.params.id, req.tenant.id]);
     
     res.json({ success: true });
   } catch (err) {
@@ -430,7 +431,7 @@ app.put('/api/customers/:id/password', async (req, res) => {
 
 app.delete('/api/customers/:id', async (req, res) => {
   try {
-    await pool.query('UPDATE customers SET deletado_em = CURRENT_TIMESTAMP, status = $1 WHERE id = $2', ['inativo', req.params.id]);
+    await pool.query('UPDATE customers SET deletado_em = CURRENT_TIMESTAMP, status = $1 WHERE id = $2 AND tenant_id = $3', ['inativo', req.params.id, req.tenant.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -473,15 +474,15 @@ app.post('/api/customers/:id/addresses', async (req, res) => {
     // If setting as default, unset other defaults
     if (is_default) {
       await client.query(
-        'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1',
-        [req.params.id]
+        'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1 AND tenant_id = $2',
+        [req.params.id, req.tenant.id]
       );
     }
     
     const result = await client.query(
-      `INSERT INTO customer_addresses (id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [id, req.params.id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default || false]
+      `INSERT INTO customer_addresses (id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [id, req.params.id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default || false, req.tenant.id]
     );
     
     await client.query('COMMIT');
@@ -607,16 +608,16 @@ app.post('/api/products', async (req, res) => {
     
     const { id, name, price, description, image, images, stock_quantity, fields } = req.body;
     const result = await client.query(
-      'INSERT INTO products (id, name, price, description, image, stock_quantity) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [id, name, price, description, image, stock_quantity || 1]
+      'INSERT INTO products (id, name, price, description, image, stock_quantity, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [id, name, price, description, image, stock_quantity || 1, req.tenant.id]
     );
     
     // Save multiple images
     if (images && Array.isArray(images)) {
       for (let i = 0; i < Math.min(images.length, 10); i++) {
         await client.query(
-          'INSERT INTO product_images (product_id, image, image_order) VALUES ($1, $2, $3)',
-          [id, images[i], i]
+          'INSERT INTO product_images (product_id, image, image_order, tenant_id) VALUES ($1, $2, $3, $4)',
+          [id, images[i], i, req.tenant.id]
         );
       }
     }
@@ -626,8 +627,8 @@ app.post('/api/products', async (req, res) => {
       for (const [fieldId, value] of Object.entries(fields)) {
         if (value) {
           await client.query(
-            'INSERT INTO product_fields (product_id, field_id, value) VALUES ($1, $2, $3)',
-            [id, fieldId, value]
+            'INSERT INTO product_fields (product_id, field_id, value, tenant_id) VALUES ($1, $2, $3, $4)',
+            [id, fieldId, value, req.tenant.id]
           );
         }
       }
@@ -650,8 +651,8 @@ app.put('/api/products/:id', async (req, res) => {
     
     const { name, price, description, image, images, stock_quantity, fields } = req.body;
     const result = await client.query(
-      'UPDATE products SET name = $1, price = $2, description = $3, image = $4, stock_quantity = $5 WHERE id = $6 RETURNING *',
-      [name, price, description, image, stock_quantity !== undefined ? stock_quantity : 1, req.params.id]
+      'UPDATE products SET name = $1, price = $2, description = $3, image = $4, stock_quantity = $5 WHERE id = $6 AND tenant_id = $7 RETURNING *',
+      [name, price, description, image, stock_quantity !== undefined ? stock_quantity : 1, req.params.id, req.tenant.id]
     );
     
     if (result.rows.length === 0) {
@@ -661,25 +662,25 @@ app.put('/api/products/:id', async (req, res) => {
     
     // Update multiple images
     if (images && Array.isArray(images)) {
-      await client.query('DELETE FROM product_images WHERE product_id = $1', [req.params.id]);
+      await client.query('DELETE FROM product_images WHERE product_id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
       for (let i = 0; i < Math.min(images.length, 10); i++) {
         await client.query(
-          'INSERT INTO product_images (product_id, image, image_order) VALUES ($1, $2, $3)',
-          [req.params.id, images[i], i]
+          'INSERT INTO product_images (product_id, image, image_order, tenant_id) VALUES ($1, $2, $3, $4)',
+          [req.params.id, images[i], i, req.tenant.id]
         );
       }
     }
     
     // Delete old custom fields
-    await client.query('DELETE FROM product_fields WHERE product_id = $1', [req.params.id]);
+    await client.query('DELETE FROM product_fields WHERE product_id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
     
     // Save new custom fields
     if (fields) {
       for (const [fieldId, value] of Object.entries(fields)) {
         if (value) {
           await client.query(
-            'INSERT INTO product_fields (product_id, field_id, value) VALUES ($1, $2, $3)',
-            [req.params.id, fieldId, value]
+            'INSERT INTO product_fields (product_id, field_id, value, tenant_id) VALUES ($1, $2, $3, $4)',
+            [req.params.id, fieldId, value, req.tenant.id]
           );
         }
       }
@@ -697,7 +698,7 @@ app.put('/api/products/:id', async (req, res) => {
 
 app.delete('/api/products/:id', async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM products WHERE id = $1 RETURNING *', [req.params.id]);
+    const result = await pool.query('DELETE FROM products WHERE id = $1 AND tenant_id = $2 RETURNING *', [req.params.id, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
@@ -721,8 +722,8 @@ app.post('/api/field-definitions', async (req, res) => {
   try {
     const { id, field_name, field_type, field_order, options } = req.body;
     const result = await pool.query(
-      'INSERT INTO field_definitions (id, field_name, field_type, is_default, can_delete, field_order, options) VALUES ($1, $2, $3, false, true, $4, $5) RETURNING *',
-      [id, field_name, field_type, field_order || 0, options]
+      'INSERT INTO field_definitions (id, field_name, field_type, is_default, can_delete, field_order, options, tenant_id) VALUES ($1, $2, $3, false, true, $4, $5, $6) RETURNING *',
+      [id, field_name, field_type, field_order || 0, options, req.tenant.id]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -734,8 +735,8 @@ app.put('/api/field-definitions/:id', async (req, res) => {
   try {
     const { field_name, field_type } = req.body;
     const result = await pool.query(
-      'UPDATE field_definitions SET field_name = $1, field_type = $2 WHERE id = $3 AND can_delete = true RETURNING *',
-      [field_name, field_type, req.params.id]
+      'UPDATE field_definitions SET field_name = $1, field_type = $2 WHERE id = $3 AND can_delete = true AND tenant_id = $4 RETURNING *',
+      [field_name, field_type, req.params.id, req.tenant.id]
     );
     if (result.rows.length === 0) {
       return res.status(403).json({ error: 'Campo não pode ser editado' });
@@ -749,8 +750,8 @@ app.put('/api/field-definitions/:id', async (req, res) => {
 app.delete('/api/field-definitions/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      'DELETE FROM field_definitions WHERE id = $1 AND can_delete = true RETURNING *',
-      [req.params.id]
+      'DELETE FROM field_definitions WHERE id = $1 AND can_delete = true AND tenant_id = $2 RETURNING *',
+      [req.params.id, req.tenant.id]
     );
     if (result.rows.length === 0) {
       return res.status(403).json({ error: 'Campo não pode ser deletado' });
@@ -783,24 +784,24 @@ app.post('/api/orders', async (req, res) => {
     
     const orderResult = await client.query(
       `INSERT INTO orders 
-       (customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at || new Date()]
+       (customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at, tenant_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at || new Date(), req.tenant.id]
     );
     
     const order = orderResult.rows[0];
     
     for (const item of items) {
       await client.query(
-        'INSERT INTO order_items (order_id, product_id, product_name, product_price, product_image, quantity, subtotal) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [order.id, item.product_id || item.id, item.product_name || item.name, item.product_price || item.price, item.product_image || item.image, item.quantity, item.subtotal || (item.price * item.quantity)]
+        'INSERT INTO order_items (order_id, product_id, product_name, product_price, product_image, quantity, subtotal, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [order.id, item.product_id || item.id, item.product_name || item.name, item.product_price || item.price, item.product_image || item.image, item.quantity, item.subtotal || (item.price * item.quantity), req.tenant.id]
       );
       
       // Deduzir do estoque se pagamento aprovado
       if (payment_status === PaymentStatus.APPROVED) {
         await client.query(
-          'UPDATE products SET stock_quantity = GREATEST(stock_quantity - $1, 0) WHERE id = $2',
-          [item.quantity, item.product_id || item.id]
+          'UPDATE products SET stock_quantity = GREATEST(stock_quantity - $1, 0) WHERE id = $2 AND tenant_id = $3',
+          [item.quantity, item.product_id || item.id, req.tenant.id]
         );
       }
     }
@@ -808,22 +809,22 @@ app.post('/api/orders', async (req, res) => {
     // Registrar histórico inicial
     await client.query(
       `INSERT INTO order_status_history 
-       (order_id, new_payment_status, new_order_status, changed_by, notes)
-       VALUES ($1, $2, $3, 'system', 'Pedido criado')`,
-      [order.id, payment_status, order_status]
+       (order_id, new_payment_status, new_order_status, changed_by, notes, tenant_id)
+       VALUES ($1, $2, $3, 'system', 'Pedido criado', $4)`,
+      [order.id, payment_status, order_status, req.tenant.id]
     );
     
     await client.query('COMMIT');
     
     // Enviar email de confirmação (não bloqueia o fluxo)
     if (customer_id) {
-      pool.query('SELECT email FROM customers WHERE id = $1', [customer_id])
+      pool.query('SELECT email FROM customers WHERE id = $1 AND tenant_id = $2', [customer_id, req.tenant.id])
         .then(customerResult => {
           if (customerResult.rows[0]?.email) {
             const customerEmail = customerResult.rows[0].email;
             
             // Buscar config para cores
-            return pool.query('SELECT primary_color, secondary_color, store_name FROM config LIMIT 1')
+            return pool.query('SELECT primary_color, secondary_color, store_name FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id])
               .then(configResult => {
                 const config = configResult.rows[0] || {};
                 const orderWithEmail = {
@@ -999,12 +1000,12 @@ app.put('/api/orders/:id/status', async (req, res) => {
           'product_image', p.image
         )) as items
       FROM orders o
-      LEFT JOIN customers c ON o.customer_id = c.id
-      LEFT JOIN order_items oi ON o.id = oi.order_id
-      LEFT JOIN products p ON oi.product_id = p.id
-      WHERE o.id = $1
+      LEFT JOIN customers c ON o.customer_id = c.id AND c.tenant_id = $2
+      LEFT JOIN order_items oi ON o.id = oi.order_id AND oi.tenant_id = $2
+      LEFT JOIN products p ON oi.product_id = p.id AND p.tenant_id = $2
+      WHERE o.id = $1 AND o.tenant_id = $2
       GROUP BY o.id, c.email
-    `, [req.params.id]);
+    `, [req.params.id, req.tenant.id]);
     
     const order = orderResult.rows[0];
     console.log('📦 Pedido encontrado:', order ? 'Sim' : 'Não');
@@ -1012,15 +1013,15 @@ app.put('/api/orders/:id/status', async (req, res) => {
     console.log('🔄 Atualizando status...');
     
     // Atualizar status
-    const result = await updateOrderStatusManual(pool, req.params.id, order_status, 'admin', notes);
+    const result = await updateOrderStatusManual(pool, req.params.id, order_status, 'admin', notes, req.tenant.id);
     
     console.log('✅ Status atualizado:', result);
     
     // Atualizar rastreio se fornecido
     if (tracking_code || delivery_deadline) {
       await pool.query(
-        'UPDATE orders SET tracking_code = $1, delivery_deadline = $2 WHERE id = $3',
-        [tracking_code || null, delivery_deadline || null, req.params.id]
+        'UPDATE orders SET tracking_code = $1, delivery_deadline = $2 WHERE id = $3 AND tenant_id = $4',
+        [tracking_code || null, delivery_deadline || null, req.params.id, req.tenant.id]
       );
       
       // Atualizar objeto order com novos valores
@@ -1037,7 +1038,7 @@ app.put('/api/orders/:id/status', async (req, res) => {
       });
       
       // Buscar configurações para cores
-      pool.query('SELECT primary_color, secondary_color, store_name FROM config LIMIT 1')
+      pool.query('SELECT primary_color, secondary_color, store_name FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id])
         .then(configResult => {
           const config = configResult.rows[0] || {};
           return sendOrderStatusEmail(order, order_status, config);
@@ -1047,6 +1048,14 @@ app.put('/api/orders/:id/status', async (req, res) => {
         });
     } else {
       console.warn('⚠️ Pedido sem email do cliente:', req.params.id);
+    }
+    
+    res.json(result);
+  } catch (err) {
+    console.error('❌ ERRO ao atualizar status:', err);
+    res.status(400).json({ error: err.message });
+  }
+});
     }
     
     res.json(result);
