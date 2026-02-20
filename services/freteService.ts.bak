@@ -1,5 +1,5 @@
 export async function calcularFrete(cepOrigem: string, cepDestino: string) {
-  const response = await fetch('/api/frete/calcular', {
+  const response = await fetch('http://localhost:3001/api/frete/calcular', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

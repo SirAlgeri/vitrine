@@ -85,7 +85,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
 
   const loadExistingOrder = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/orders/${urlOrderId}`);
+      const res = await fetch(`/api/orders/${urlOrderId}`);
       const data = await res.json();
       setExistingOrder(data);
     } catch (err) {
@@ -141,7 +141,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       if (!validateCPFStep()) return;
       setSaving(true);
       try {
-        await fetch(`http://localhost:3001/api/customers/${customer!.id}`, {
+        await fetch(`/api/customers/${customer!.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -161,7 +161,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       if (!validateAddressStep()) return;
       setSaving(true);
       try {
-        await fetch(`http://localhost:3001/api/customers/${customer!.id}`, {
+        await fetch(`/api/customers/${customer!.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -192,7 +192,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       try {
         if (urlOrderId) {
           // Atualizar pedido existente com dados de pagamento
-          await fetch(`http://localhost:3001/api/orders/${urlOrderId}/payment`, {
+          await fetch(`/api/orders/${urlOrderId}/payment`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -216,7 +216,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
             }
           }
           
-          const response = await fetch('http://localhost:3001/api/orders', {
+          const response = await fetch('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

@@ -15,6 +15,7 @@ import {
   updateOrderStatusManual 
 } from './statusManager.js';
 import { sendOrderStatusEmail, sendVerificationEmail } from './emailService.js';
+import { tenantMiddleware } from './middleware/tenant.js';
 
 dotenv.config();
 
@@ -27,7 +28,13 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
-
+// Tenant middleware
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/admin/tenants')) {
+    return next();
+  }
+  return tenantMiddleware(req, res, next);
+});
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -36,8 +43,17 @@ app.get('/api/health', (req, res) => {
 // ========== CONFIG ==========
 app.get('/api/config', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM config LIMIT 1');
+    const result = await pool.query('SELECT * FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id]);
     res.json(result.rows[0] || {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== TENANT ==========
+app.get('/api/tenant/current', async (req, res) => {
+  try {
+    res.json(req.tenant);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -521,7 +537,7 @@ app.delete('/api/addresses/:id', async (req, res) => {
 app.get('/api/products', async (req, res) => {
   const client = await pool.connect();
   try {
-    const productsResult = await client.query('SELECT * FROM products ORDER BY created_at DESC');
+    const productsResult = await client.query('SELECT * FROM products WHERE tenant_id = $1 ORDER BY created_at DESC', [req.tenant.id]);
     const products = productsResult.rows;
     
     // Load custom fields and images for each product
@@ -554,7 +570,7 @@ app.get('/api/products', async (req, res) => {
 app.get('/api/products/:id', async (req, res) => {
   const client = await pool.connect();
   try {
-    const result = await client.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    const result = await client.query('SELECT * FROM products WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }

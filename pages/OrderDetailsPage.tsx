@@ -16,7 +16,7 @@ export const OrderDetailsPage: React.FC = () => {
 
   const loadOrder = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/orders/${orderId}?t=${Date.now()}`);
+      const res = await fetch(`/api/orders/${orderId}?t=${Date.now()}`);
       const data = await res.json();
       setOrder(data);
     } catch (err) {

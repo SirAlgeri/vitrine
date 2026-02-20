@@ -23,7 +23,7 @@ export const AdminOrderDetails: React.FC<AdminOrderDetailsProps> = ({ orderId, o
   }, [orderId]);
 
   const loadOrder = async () => {
-    const res = await fetch(`http://localhost:3001/api/orders/${orderId}`);
+    const res = await fetch(`/api/orders/${orderId}`);
     const data = await res.json();
     setOrder(data);
     setFormData({
@@ -40,7 +40,7 @@ export const AdminOrderDetails: React.FC<AdminOrderDetailsProps> = ({ orderId, o
     }
 
     try {
-      await fetch(`http://localhost:3001/api/orders/${orderId}/status`, {
+      await fetch(`/api/orders/${orderId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

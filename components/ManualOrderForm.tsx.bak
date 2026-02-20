@@ -43,13 +43,13 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
   }, []);
 
   const loadCustomers = async () => {
-    const res = await fetch('/api/customers');
+    const res = await fetch('http://localhost:3001/api/customers');
     const data = await res.json();
     setCustomers(data);
   };
 
   const loadProducts = async () => {
-    const res = await fetch('/api/products');
+    const res = await fetch('http://localhost:3001/api/products');
     const data = await res.json();
     setProducts(data);
   };
@@ -81,7 +81,7 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
 
   const createCustomer = async () => {
     try {
-      const res = await fetch('/api/customers', {
+      const res = await fetch('http://localhost:3001/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCustomer)
@@ -171,7 +171,7 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
     e.preventDefault();
     
     try {
-      const response = await fetch('/api/orders', {
+      const response = await fetch('http://localhost:3001/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
