@@ -14,7 +14,8 @@ import {
   updateOrderStatus,
   updateOrderStatusManual 
 } from './statusManager.js';
-import { sendOrderStatusEmail, sendVerificationEmail } from './emailService.js';
+// SMTP Email Service (substitui AWS SES)
+import { sendOrderStatusEmail, sendVerificationEmail } from './smtpEmailService.js';
 import { tenantMiddleware } from './middleware/tenant.js';
 
 dotenv.config();
