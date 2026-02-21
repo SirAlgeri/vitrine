@@ -206,6 +206,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <p className="text-xs text-slate-500 mt-1">CEP para cálculo de frete</p>
             </div>
 
+            <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/50">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tempConfig.enablePickup || false}
+                  onChange={(e) => setTempConfig({...tempConfig, enablePickup: e.target.checked})}
+                  className="w-5 h-5 rounded border-slate-600 text-primary focus:ring-primary focus:ring-offset-slate-900"
+                />
+                <div>
+                  <span className="text-sm font-medium text-white">Habilitar Retirada Pessoal</span>
+                  <p className="text-xs text-slate-500">Permitir que clientes retirem pedidos no local (frete R$ 0,00)</p>
+                </div>
+              </label>
+              {tempConfig.enablePickup && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-slate-400 mb-2">Endereço para Retirada</label>
+                  <textarea
+                    value={tempConfig.pickupAddress || ''}
+                    onChange={(e) => setTempConfig({...tempConfig, pickupAddress: e.target.value})}
+                    placeholder="Ex: Rua Exemplo, 123 - Centro - São Paulo/SP"
+                    rows={2}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors resize-none"
+                  />
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">Margem de Lucro (%)</label>
               <input

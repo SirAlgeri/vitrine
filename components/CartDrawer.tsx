@@ -323,6 +323,35 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <p className="text-slate-400 text-sm">Calculando frete...</p>
                   )}
 
+                  {/* Opção de Retirada Pessoal */}
+                  {config.enablePickup && (
+                    <label
+                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${
+                        freteSelecionado?.servico === 'RETIRADA'
+                          ? 'bg-primary/10 border-primary'
+                          : 'bg-slate-900 border-slate-700 hover:border-slate-600'
+                      }`}
+                      onClick={() => setFreteSelecionado({ servico: 'RETIRADA', valor: 0, prazo: 0 })}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name="frete"
+                          checked={freteSelecionado?.servico === 'RETIRADA'}
+                          onChange={() => setFreteSelecionado({ servico: 'RETIRADA', valor: 0, prazo: 0 })}
+                          className="text-primary"
+                        />
+                        <div>
+                          <p className="text-white font-medium text-sm">🏪 Retirar Pessoalmente</p>
+                          {config.pickupAddress && (
+                            <p className="text-slate-400 text-xs">{config.pickupAddress}</p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-green-400 font-bold">GRÁTIS</span>
+                    </label>
+                  )}
+
                   {freteOptions.length > 0 && !loadingFrete && (
                     <div className="space-y-2">
                       {freteOptions.map((opcao, idx) => (

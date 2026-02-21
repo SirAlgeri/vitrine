@@ -51,6 +51,8 @@ export interface AppConfig {
   logo_url?: string;
   markupPercentage?: number;
   cepOrigem?: string;
+  enablePickup?: boolean;
+  pickupAddress?: string;
 }
 
 export type ViewState = 'CATALOG' | 'ADMIN_DASHBOARD' | 'PRODUCT_FORM' | 'FIELD_MANAGER' | 'CUSTOMER_ACCOUNT' | 'AUTH';

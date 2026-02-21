@@ -65,7 +65,7 @@ app.put('/api/config', async (req, res) => {
     const { 
       store_name, primary_color, secondary_color, whatsapp_number, logo_url, 
       enable_online_checkout, enable_whatsapp_checkout, payment_methods, 
-      markup_percentage, cep_origem,
+      markup_percentage, cep_origem, enable_pickup, pickup_address,
       smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, smtp_from_name
     } = req.body;
     
@@ -121,6 +121,14 @@ app.put('/api/config', async (req, res) => {
       }
       updates.push(`cep_origem = $${paramCount++}`);
       values.push(cleanCep);
+    }
+    if (enable_pickup !== undefined) {
+      updates.push(`enable_pickup = $${paramCount++}`);
+      values.push(enable_pickup);
+    }
+    if (pickup_address !== undefined) {
+      updates.push(`pickup_address = $${paramCount++}`);
+      values.push(pickup_address);
     }
     
     // Campos SMTP

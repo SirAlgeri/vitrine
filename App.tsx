@@ -51,7 +51,9 @@ const AppContent: React.FC = () => {
           whatsappNumber: configData.whatsapp_number,
           logo_url: configData.logo_url,
           markupPercentage: configData.markup_percentage || 0,
-          cepOrigem: configData.cep_origem
+          cepOrigem: configData.cep_origem,
+          enablePickup: configData.enable_pickup,
+          pickupAddress: configData.pickup_address
         });
       }
     } catch (err) {
@@ -118,7 +120,9 @@ const AppContent: React.FC = () => {
         whatsapp_number: newConfig.whatsappNumber,
         logo_url: newConfig.logo_url,
         markup_percentage: newConfig.markupPercentage,
-        cep_origem: newConfig.cepOrigem
+        cep_origem: newConfig.cepOrigem,
+        enable_pickup: newConfig.enablePickup,
+        pickup_address: newConfig.pickupAddress
       });
       setConfig(newConfig);
     } catch (err) {
