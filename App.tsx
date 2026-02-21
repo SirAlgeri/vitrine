@@ -44,7 +44,7 @@ const AppContent: React.FC = () => {
     try {
       const configData = await api.getConfig();
       if (configData.store_name) {
-        setConfig({
+        const newConfig = {
           storeName: configData.store_name,
           primaryColor: configData.primary_color,
           secondaryColor: configData.secondary_color,
@@ -54,7 +54,19 @@ const AppContent: React.FC = () => {
           cepOrigem: configData.cep_origem,
           enablePickup: configData.enable_pickup,
           pickupAddress: configData.pickup_address
-        });
+        };
+        setConfig(newConfig);
+        
+        // Atualizar título da página
+        document.title = configData.store_name;
+        
+        // Atualizar favicon
+        if (configData.logo_url) {
+          const favicon = document.getElementById('favicon') as HTMLLinkElement;
+          if (favicon) {
+            favicon.href = configData.logo_url;
+          }
+        }
       }
     } catch (err) {
       console.error('Erro ao carregar configuração');
