@@ -212,7 +212,7 @@ export default function SmtpSettings({ onBack }: SmtpSettingsProps) {
 
             {/* Dicas */}
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-              <h3 className="font-semibold text-primary mb-2">💡 Dicas:</h3>
+              <h3 className="font-semibold text-primary mb-2">Dicas:</h3>
               <ul className="text-sm text-slate-300 space-y-1">
                 <li>• <strong>Gmail:</strong> Use senha de app (não a senha normal)</li>
                 <li>• <strong>Outlook:</strong> Use sua senha normal</li>
@@ -223,7 +223,7 @@ export default function SmtpSettings({ onBack }: SmtpSettingsProps) {
 
             {/* Link para criar senha de app */}
             <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-              <h3 className="font-semibold text-slate-200 mb-2">🔑 Como obter senha de app do Gmail:</h3>
+              <h3 className="font-semibold text-slate-200 mb-2">Como obter senha de app do Gmail:</h3>
               <ol className="text-sm text-slate-400 space-y-1 list-decimal list-inside">
                 <li>Acesse: <a href="https://myaccount.google.com/security" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">myaccount.google.com/security</a></li>
                 <li>Ative "Verificação em duas etapas"</li>
