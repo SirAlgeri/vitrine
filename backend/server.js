@@ -770,7 +770,9 @@ app.post('/api/field-definitions', async (req, res) => {
       'INSERT INTO field_definitions (id, field_name, field_type, is_default, can_delete, field_order, options, tenant_id) VALUES ($1, $2, $3, false, true, $4, $5, $6) RETURNING *',
       [id, field_name, field_type, field_order || 0, options, req.tenant.id]
     );
-    res.status(201).json(result.rows[0]);
+    const field = result.rows[0];
+    field.options = field.options ? JSON.parse(field.options) : null;
+    res.status(201).json(field);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
