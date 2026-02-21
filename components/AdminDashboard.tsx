@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Product, AppConfig } from '../types';
-import { Plus, Edit2, Trash2, Settings, Palette, Save, Tag, CreditCard, BarChart3 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Settings, Palette, Save, Tag, CreditCard, BarChart3, Mail } from 'lucide-react';
 import { formatPhone } from '../services/validators';
 
 interface AdminDashboardProps {
@@ -11,6 +11,7 @@ interface AdminDashboardProps {
   onUpdateConfig: (newConfig: AppConfig) => void;
   onManageCategories: () => void;
   onManagePayments: () => void;
+  onManageSmtp: () => void;
   onViewSales: () => void;
   successMessage?: string;
 }
@@ -23,6 +24,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateConfig,
   onManageCategories,
   onManagePayments,
+  onManageSmtp,
   onViewSales,
   successMessage
 }) => {
@@ -91,6 +93,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             title="Métodos de Pagamento"
           >
             <CreditCard className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onManageSmtp}
+            className="p-2.5 rounded-lg border bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+            title="Configurar Email (SMTP)"
+          >
+            <Mail className="w-5 h-5" />
           </button>
           <button
             onClick={() => setShowConfig(!showConfig)}
