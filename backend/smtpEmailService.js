@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import pool from './db.js';
+import { pool } from './db.js';
 
 const statusMessages = {
   pending: { title: 'Pedido Recebido com Sucesso!', message: 'Obrigado por sua compra! Seu pedido foi recebido e será processado em breve. Você receberá atualizações por email.', label: 'Aguardando Pagamento' },
