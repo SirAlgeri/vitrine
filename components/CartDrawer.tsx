@@ -333,7 +333,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       }`}
                       onClick={() => setFreteSelecionado({ servico: 'RETIRADA', valor: 0, prazo: 0 })}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 space-y-2">
                         <input
                           type="radio"
                           name="frete"
@@ -342,7 +342,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                           className="text-primary"
                         />
                         <div>
-                          <p className="text-white font-medium text-sm">🏪 Retirar Pessoalmente</p>
+                          <p className="text-white font-medium text-sm">Retirar Pessoalmente</p>
                           {config.pickupAddress && (
                             <p className="text-slate-400 text-xs">{config.pickupAddress}</p>
                           )}
