@@ -753,7 +753,12 @@ app.delete('/api/products/:id', async (req, res) => {
 app.get('/api/field-definitions', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM field_definitions WHERE tenant_id = $1 ORDER BY field_order', [req.tenant.id]);
-    res.json(result.rows);
+    // Parse options de string JSON para array
+    const fields = result.rows.map(field => ({
+      ...field,
+      options: field.options ? JSON.parse(field.options) : null
+    }));
+    res.json(fields);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

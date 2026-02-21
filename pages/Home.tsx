@@ -39,9 +39,16 @@ export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
     try {
       const res = await fetch('/api/field-definitions');
       const data = await res.json();
-      setFields(data.filter((f: FieldDefinition) => f.field_type === 'select'));
+      // Garantir que data é um array antes de filtrar
+      if (Array.isArray(data)) {
+        setFields(data.filter((f: FieldDefinition) => f.field_type === 'select'));
+      } else {
+        console.error('Resposta inválida de field-definitions:', data);
+        setFields([]);
+      }
     } catch (err) {
       console.error('Erro ao carregar campos');
+      setFields([]);
     }
   };
 
