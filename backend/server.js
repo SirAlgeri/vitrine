@@ -595,7 +595,6 @@ app.get('/api/products', async (req, res) => {
       const imagesResult = await client.query(
         'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
         [product.id, req.tenant.id]
-        [product.id]
       );
       product.images = imagesResult.rows.map(row => row.image);
     }
