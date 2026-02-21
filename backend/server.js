@@ -62,7 +62,12 @@ app.get('/api/tenant/current', async (req, res) => {
 
 app.put('/api/config', async (req, res) => {
   try {
-    const { store_name, primary_color, secondary_color, whatsapp_number, logo_url, enable_online_checkout, enable_whatsapp_checkout, payment_methods, markup_percentage, cep_origem } = req.body;
+    const { 
+      store_name, primary_color, secondary_color, whatsapp_number, logo_url, 
+      enable_online_checkout, enable_whatsapp_checkout, payment_methods, 
+      markup_percentage, cep_origem,
+      smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, smtp_from_name
+    } = req.body;
     
     // Construir query dinamicamente baseado nos campos enviados
     const updates = [];
@@ -116,6 +121,36 @@ app.put('/api/config', async (req, res) => {
       }
       updates.push(`cep_origem = $${paramCount++}`);
       values.push(cleanCep);
+    }
+    
+    // Campos SMTP
+    if (smtp_host !== undefined) {
+      updates.push(`smtp_host = $${paramCount++}`);
+      values.push(smtp_host);
+    }
+    if (smtp_port !== undefined) {
+      updates.push(`smtp_port = $${paramCount++}`);
+      values.push(smtp_port);
+    }
+    if (smtp_secure !== undefined) {
+      updates.push(`smtp_secure = $${paramCount++}`);
+      values.push(smtp_secure);
+    }
+    if (smtp_user !== undefined) {
+      updates.push(`smtp_user = $${paramCount++}`);
+      values.push(smtp_user);
+    }
+    if (smtp_pass !== undefined) {
+      updates.push(`smtp_pass = $${paramCount++}`);
+      values.push(smtp_pass);
+    }
+    if (smtp_from !== undefined) {
+      updates.push(`smtp_from = $${paramCount++}`);
+      values.push(smtp_from);
+    }
+    if (smtp_from_name !== undefined) {
+      updates.push(`smtp_from_name = $${paramCount++}`);
+      values.push(smtp_from_name);
     }
     
     if (updates.length === 0) {
