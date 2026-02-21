@@ -283,7 +283,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
                   >
                     <option value="">Selecione...</option>
-                    {JSON.parse(field.options).map((option: string) => (
+                    {field.options.map((option: string) => (
                       <option key={option} value={option}>{option}</option>
                     ))}
                   </select>

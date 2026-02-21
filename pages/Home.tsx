@@ -167,7 +167,7 @@ export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
 
                 {/* Filtros de Campos Select */}
                 {fields.map(field => {
-                  const options = field.options ? JSON.parse(field.options) : [];
+                  const options = field.options || [];
                   return (
                     <div key={field.id}>
                       <label className="block text-sm font-medium text-slate-400 mb-2">{field.field_name}</label>

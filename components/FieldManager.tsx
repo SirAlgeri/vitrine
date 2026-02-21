@@ -172,7 +172,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
                   </div>
                   {field.field_type === 'select' && field.options && (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {JSON.parse(field.options).map((opt: string, i: number) => (
+                      {field.options.map((opt: string, i: number) => (
                         <span key={i} className="px-2 py-1 bg-slate-700 rounded text-xs text-slate-300">
                           {opt}
                         </span>
