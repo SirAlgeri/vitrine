@@ -175,7 +175,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const getWhatsappLink = () => {
     const itemsList = cart.map(item => 
-      `• ${item.quantity}x ${item.name} - ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price * item.quantity)}`
+      `• ${item.quantity}x ${item.name} (ID: ${item.id}) - ${new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price * item.quantity)}`
     ).join('\n');
 
     const totalFormatted = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total);
