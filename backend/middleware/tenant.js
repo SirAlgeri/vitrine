@@ -8,18 +8,27 @@ export async function tenantMiddleware(req, res, next) {
     // Extrair host do header
     const host = req.get('host') || '';
 
-    // Extrair subdomínio (ex: mcptennis.meudominio.com -> mcptennis)
+    // Extrair subdomínio
     const parts = host.split('.');
     let subdomain = 'www'; // padrão
 
-    // Se é localhost ou IP, usar 'www'
-    if (host.includes('localhost') || /^\d+\.\d+\.\d+\.\d+/.test(host)) {
+    // Se é IP direto, usar 'www'
+    if (/^\d+\.\d+\.\d+\.\d+/.test(host.split(':')[0])) {
+      subdomain = 'www';
+    }
+    // Se tem subdomínio.localhost (ex: anemissara.localhost)
+    else if (host.includes('.localhost')) {
+      subdomain = parts[0];
+    }
+    // Se é só localhost ou www.localhost
+    else if (host.startsWith('localhost') || host.startsWith('www.localhost')) {
       subdomain = 'www';
     }
     // Se tem mais de 2 partes (ex: mcptennis.meudominio.com)
     else if (parts.length >= 3) {
       subdomain = parts[0];
     }
+
 
     // Buscar tenant no banco
     const result = await pool.query(
