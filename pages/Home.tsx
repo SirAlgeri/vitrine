@@ -37,11 +37,18 @@ export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
 
   const loadFields = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/field-definitions');
+      const res = await fetch('/api/field-definitions');
       const data = await res.json();
-      setFields(data.filter((f: FieldDefinition) => f.field_type === 'select'));
+      // Garantir que data é um array antes de filtrar
+      if (Array.isArray(data)) {
+        setFields(data.filter((f: FieldDefinition) => f.field_type === 'select'));
+      } else {
+        console.error('Resposta inválida de field-definitions:', data);
+        setFields([]);
+      }
     } catch (err) {
       console.error('Erro ao carregar campos');
+      setFields([]);
     }
   };
 
@@ -160,7 +167,7 @@ export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
 
                 {/* Filtros de Campos Select */}
                 {fields.map(field => {
-                  const options = field.options ? JSON.parse(field.options) : [];
+                  const options = field.options || [];
                   return (
                     <div key={field.id}>
                       <label className="block text-sm font-medium text-slate-400 mb-2">{field.field_name}</label>

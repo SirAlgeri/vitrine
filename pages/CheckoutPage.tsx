@@ -85,7 +85,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
 
   const loadExistingOrder = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/orders/${urlOrderId}`);
+      const res = await fetch(`/api/orders/${urlOrderId}`);
       const data = await res.json();
       setExistingOrder(data);
     } catch (err) {
@@ -141,7 +141,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       if (!validateCPFStep()) return;
       setSaving(true);
       try {
-        await fetch(`http://localhost:3001/api/customers/${customer!.id}`, {
+        await fetch(`/api/customers/${customer!.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -161,7 +161,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       if (!validateAddressStep()) return;
       setSaving(true);
       try {
-        await fetch(`http://localhost:3001/api/customers/${customer!.id}`, {
+        await fetch(`/api/customers/${customer!.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -192,7 +192,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       try {
         if (urlOrderId) {
           // Atualizar pedido existente com dados de pagamento
-          await fetch(`http://localhost:3001/api/orders/${urlOrderId}/payment`, {
+          await fetch(`/api/orders/${urlOrderId}/payment`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -216,7 +216,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
             }
           }
           
-          const response = await fetch('http://localhost:3001/api/orders', {
+          const response = await fetch('/api/orders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -594,20 +594,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
             <div>
               <h3 className="font-semibold text-white mb-2">Produtos</h3>
               <div className="space-y-3">
-                {items.map((item: any) => (
-                  <div key={item.id} className="flex gap-3 items-center">
-                    <img src={item.image || item.product_image} alt={item.name || item.product_name} className="w-16 h-16 object-cover rounded-lg" />
-                    <div className="flex-1">
-                      <p className="text-white font-medium">{item.name || item.product_name}</p>
-                      <p className="text-slate-400 text-sm">Quantidade: {item.quantity}</p>
+                {items.map((item: any) => {
+                  const priceWithMarkup = applyMarkup(item.price, config.markupPercentage || 0);
+                  return (
+                    <div key={item.id} className="flex gap-3 items-center">
+                      <img src={item.image || item.product_image} alt={item.name || item.product_name} className="w-16 h-16 object-cover rounded-lg" />
+                      <div className="flex-1">
+                        <p className="text-white font-medium">{item.name || item.product_name}</p>
+                        <p className="text-slate-400 text-sm">Quantidade: {item.quantity}</p>
+                      </div>
+                      <span className="text-white font-semibold">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                          item.subtotal || (priceWithMarkup * item.quantity)
+                        )}
+                      </span>
                     </div>
-                    <span className="text-white font-semibold">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                        item.subtotal || (item.price * item.quantity)
-                      )}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="border-t border-slate-700 mt-2 pt-2 flex justify-between text-white font-bold">
                 <span>Total</span>

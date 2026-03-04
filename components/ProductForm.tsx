@@ -16,6 +16,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
     description: '',
     id: '',
     image: '',
+    images: [],
+    stock_quantity: 1,
     fields: {}
   });
   const [fields, setFields] = useState<FieldDefinition[]>([]);
@@ -30,24 +32,50 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
   }, [initialProduct]);
 
   const loadFields = async () => {
-    const res = await fetch('http://localhost:3001/api/field-definitions');
+    const res = await fetch('/api/field-definitions');
     const data = await res.json();
     setFields(data.filter((f: FieldDefinition) => !f.is_default));
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const currentImages = formData.images || [];
+    if (currentImages.length >= 10) {
+      alert('Máximo de 10 fotos por produto');
+      return;
+    }
 
     setIsProcessingImg(true);
     try {
-      const base64 = await StorageService.compressImage(file);
-      setFormData(prev => ({ ...prev, image: base64 }));
+      const newImages = [];
+      for (let i = 0; i < Math.min(files.length, 10 - currentImages.length); i++) {
+        const base64 = await StorageService.compressImage(files[i]);
+        newImages.push(base64);
+      }
+      
+      const allImages = [...currentImages, ...newImages];
+      setFormData(prev => ({ 
+        ...prev, 
+        images: allImages,
+        image: allImages[0] || '' // Primeira imagem como principal
+      }));
     } catch (error) {
       alert('Erro ao processar imagem. Tente uma foto menor.');
     } finally {
       setIsProcessingImg(false);
     }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    const newImages = [...(formData.images || [])];
+    newImages.splice(index, 1);
+    setFormData(prev => ({
+      ...prev,
+      images: newImages,
+      image: newImages[0] || ''
+    }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -63,6 +91,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
       price: Number(formData.price),
       description: formData.description || '',
       image: formData.image || '',
+      images: formData.images || [],
+      stock_quantity: formData.stock_quantity || 1,
       createdAt: initialProduct?.createdAt || Date.now(),
       fields: formData.fields || {}
     };
@@ -82,49 +112,60 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
         
         {/* Image Upload Area */}
         <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-400">Foto do Produto</label>
-            <div 
-                className={`relative aspect-video rounded-xl border-2 border-dashed ${formData.image ? 'border-primary/50' : 'border-slate-700'} bg-slate-800 overflow-hidden group cursor-pointer transition-colors hover:border-primary`}
-                onClick={() => fileInputRef.current?.click()}
-            >
-                {formData.image ? (
-                    <>
-                        <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                            <span className="text-white font-medium flex items-center gap-2">
-                                <Camera className="w-5 h-5" /> Alterar Foto
-                            </span>
-                        </div>
-                    </>
-                ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-3">
-                        {isProcessingImg ? (
-                            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+            <label className="block text-sm font-medium text-slate-400">
+              Fotos do Produto ({(formData.images || []).length}/10)
+            </label>
+            
+            {/* Grid de imagens */}
+            {(formData.images || []).length > 0 && (
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                {(formData.images || []).map((img, index) => (
+                  <div key={index} className="relative aspect-square rounded-lg overflow-hidden border-2 border-slate-700 group">
+                    <img src={img} alt={`Foto ${index + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-4 h-4 text-white" />
+                    </button>
+                    {index === 0 && (
+                      <div className="absolute bottom-1 left-1 px-2 py-0.5 bg-primary text-white text-xs rounded">
+                        Principal
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Botão de upload */}
+            {(formData.images || []).length < 10 && (
+              <div 
+                  className="relative aspect-video rounded-xl border-2 border-dashed border-slate-700 bg-slate-800 overflow-hidden group cursor-pointer transition-colors hover:border-primary"
+                  onClick={() => fileInputRef.current?.click()}
+              >
+                  <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 gap-3">
+                      {isProcessingImg ? (
+                          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
                         ) : (
                             <>
                                 <UploadCloud className="w-10 h-10 mb-2" />
-                                <span className="text-sm">Toque para adicionar foto</span>
+                                <span className="text-sm">Toque para adicionar fotos</span>
+                                <span className="text-xs">Até {10 - (formData.images || []).length} fotos</span>
                             </>
                         )}
                     </div>
-                )}
+                </div>
+            )}
                 <input 
                     type="file" 
                     ref={fileInputRef} 
                     onChange={handleImageUpload} 
-                    accept="image/*" 
+                    accept="image/*"
+                    multiple
                     className="hidden" 
                 />
-            </div>
-            {formData.image && (
-                <button 
-                    type="button" 
-                    onClick={(e) => { e.stopPropagation(); setFormData({...formData, image: ''}); }}
-                    className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
-                >
-                    <X className="w-3 h-3" /> Remover foto atual
-                </button>
-            )}
         </div>
 
         {/* Basic Info */}
@@ -152,16 +193,31 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
             </div>
         </div>
 
-        <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-400">Nome do Produto</label>
-            <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-400">Nome do Produto</label>
+                <input
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
                 placeholder="Ex: Tênis Esportivo Pro"
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all text-lg"
             />
+        </div>
+        
+            <div className="space-y-2">
+                <label className="block text-sm font-medium text-slate-400">Quantidade em Estoque</label>
+                <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    value={formData.stock_quantity || 1}
+                    onChange={(e) => setFormData({...formData, stock_quantity: parseInt(e.target.value) || 0})}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all text-lg font-semibold"
+                />
+            </div>
         </div>
 
         <div className="space-y-2">
@@ -227,7 +283,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all"
                   >
                     <option value="">Selecione...</option>
-                    {JSON.parse(field.options).map((option: string) => (
+                    {field.options.map((option: string) => (
                       <option key={option} value={option}>{option}</option>
                     ))}
                   </select>

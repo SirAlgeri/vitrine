@@ -5,3 +5,8 @@ dist/
 .vite/
 backend/node_modules/
 backend/.env
+backend/.env.swp
+**/.env.swp
+.env.local
+backend/.env.local
+vitrinepro_prod.sql

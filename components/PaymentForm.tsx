@@ -65,7 +65,7 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
 
   const loadConfig = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/config');
+      const response = await fetch('/api/config');
       const config = await response.json();
       if (config.payment_methods && Array.isArray(config.payment_methods)) {
         setAvailableMethods(config.payment_methods);
@@ -85,7 +85,7 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
 
   const loadMercadoPago = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/mercadopago/public-key');
+      const response = await fetch('/api/mercadopago/public-key');
       const { publicKey } = await response.json();
       
       // Check if script already exists
@@ -177,7 +177,7 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
     try {
       const { token, issuerId, paymentMethodId, installments: selectedInstallments } = await formInstance.getCardFormData();
       
-      const response = await fetch('http://localhost:3001/api/mercadopago/process-payment', {
+      const response = await fetch('/api/mercadopago/process-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -221,7 +221,7 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
       const [firstName, ...lastNameParts] = customerData.name.split(' ');
       const lastName = lastNameParts.join(' ') || firstName;
       
-      const response = await fetch('http://localhost:3001/api/mercadopago/create-pix', {
+      const response = await fetch('/api/mercadopago/create-pix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -266,7 +266,7 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
       const [firstName, ...lastNameParts] = customerData.name.trim().split(' ');
       const lastName = lastNameParts.join(' ') || firstName;
       
-      const response = await fetch('http://localhost:3001/api/mercadopago/create-boleto', {
+      const response = await fetch('/api/mercadopago/create-boleto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

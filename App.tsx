@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { CartDrawer } from './components/CartDrawer';
-import { ThemeProvider } from './components/ThemeProvider';
 import { Home } from './pages/Home';
 import { AuthPage } from './pages/AuthPage';
 import { AdminPage } from './pages/AdminPage';
@@ -45,7 +44,7 @@ const AppContent: React.FC = () => {
     try {
       const configData = await api.getConfig();
       if (configData.store_name) {
-        setConfig({
+        const newConfig = {
           storeName: configData.store_name,
           primaryColor: configData.primary_color,
           secondaryColor: configData.secondary_color,
@@ -53,17 +52,21 @@ const AppContent: React.FC = () => {
           logo_url: configData.logo_url,
           markupPercentage: configData.markup_percentage || 0,
           cepOrigem: configData.cep_origem,
-          background_color: configData.background_color,
-          card_color: configData.card_color,
-          surface_color: configData.surface_color,
-          text_primary_color: configData.text_primary_color,
-          text_secondary_color: configData.text_secondary_color,
-          border_color: configData.border_color,
-          button_primary_color: configData.button_primary_color,
-          button_primary_hover_color: configData.button_primary_hover_color,
-          button_secondary_color: configData.button_secondary_color,
-          button_secondary_hover_color: configData.button_secondary_hover_color
-        });
+          enablePickup: configData.enable_pickup,
+          pickupAddress: configData.pickup_address
+        };
+        setConfig(newConfig);
+        
+        // Atualizar título da página
+        document.title = configData.store_name;
+        
+        // Atualizar favicon
+        if (configData.logo_url) {
+          const favicon = document.getElementById('favicon') as HTMLLinkElement;
+          if (favicon) {
+            favicon.href = configData.logo_url;
+          }
+        }
       }
     } catch (err) {
       console.error('Erro ao carregar configuração');
@@ -130,16 +133,8 @@ const AppContent: React.FC = () => {
         logo_url: newConfig.logo_url,
         markup_percentage: newConfig.markupPercentage,
         cep_origem: newConfig.cepOrigem,
-        background_color: newConfig.background_color,
-        card_color: newConfig.card_color,
-        surface_color: newConfig.surface_color,
-        text_primary_color: newConfig.text_primary_color,
-        text_secondary_color: newConfig.text_secondary_color,
-        border_color: newConfig.border_color,
-        button_primary_color: newConfig.button_primary_color,
-        button_primary_hover_color: newConfig.button_primary_hover_color,
-        button_secondary_color: newConfig.button_secondary_color,
-        button_secondary_hover_color: newConfig.button_secondary_hover_color
+        enable_pickup: newConfig.enablePickup,
+        pickup_address: newConfig.pickupAddress
       });
       setConfig(newConfig);
     } catch (err) {
@@ -151,7 +146,6 @@ const AppContent: React.FC = () => {
 
   return (
     <>
-      <ThemeProvider config={config} />
       <Layout 
         config={config} 
         isAuthenticated={isAuthenticated}

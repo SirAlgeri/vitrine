@@ -70,6 +70,21 @@ export async function updateOrderStatus(pool, orderId, paymentProviderStatus, ch
     const newPaymentStatus = mapMercadoPagoStatus(paymentProviderStatus);
     const newOrderStatus = PAYMENT_TO_ORDER_STATUS[newPaymentStatus];
     
+    // Deduzir estoque se pagamento foi aprovado agora
+    if (newPaymentStatus === PaymentStatus.APPROVED && oldPaymentStatus !== PaymentStatus.APPROVED) {
+      const items = await client.query(
+        'SELECT product_id, quantity FROM order_items WHERE order_id = $1',
+        [orderId]
+      );
+      
+      for (const item of items.rows) {
+        await client.query(
+          'UPDATE products SET stock_quantity = GREATEST(stock_quantity - $1, 0) WHERE id = $2',
+          [item.quantity, item.product_id]
+        );
+      }
+    }
+    
     // Atualizar pedido
     await client.query(
       `UPDATE orders 
@@ -102,14 +117,17 @@ export async function updateOrderStatus(pool, orderId, paymentProviderStatus, ch
 
 // ========== ATUALIZAR STATUS MANUAL (ADMIN) ==========
 
-export async function updateOrderStatusManual(pool, orderId, newOrderStatus, changedBy = 'admin', notes = null) {
+export async function updateOrderStatusManual(pool, orderId, newOrderStatus, changedBy = 'admin', notes = null, tenantId = null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
+    const whereClause = tenantId ? 'WHERE id = $1 AND tenant_id = $2' : 'WHERE id = $1';
+    const params = tenantId ? [orderId, tenantId] : [orderId];
+    
     const currentOrder = await client.query(
-      'SELECT payment_status, order_status FROM orders WHERE id = $1',
-      [orderId]
+      `SELECT payment_status, order_status FROM orders ${whereClause}`,
+      params
     );
     
     if (currentOrder.rows.length === 0) {
@@ -131,16 +149,20 @@ export async function updateOrderStatusManual(pool, orderId, newOrderStatus, cha
     await client.query(
       `UPDATE orders 
        SET order_status = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2`,
-      [newOrderStatus, orderId]
+       ${whereClause}`,
+      tenantId ? [newOrderStatus, orderId, tenantId] : [newOrderStatus, orderId]
     );
     
     // Registrar histórico
+    const historyParams = tenantId 
+      ? [orderId, oldOrderStatus, newOrderStatus, changedBy, notes, tenantId]
+      : [orderId, oldOrderStatus, newOrderStatus, changedBy, notes];
+    
     await client.query(
       `INSERT INTO order_status_history 
-       (order_id, previous_order_status, new_order_status, changed_by, notes)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [orderId, oldOrderStatus, newOrderStatus, changedBy, notes]
+       (order_id, previous_order_status, new_order_status, changed_by, notes${tenantId ? ', tenant_id' : ''})
+       VALUES ($1, $2, $3, $4, $5${tenantId ? ', $6' : ''})`,
+      historyParams
     );
     
     await client.query('COMMIT');

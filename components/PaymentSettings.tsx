@@ -22,7 +22,7 @@ export const PaymentSettings: React.FC<PaymentSettingsProps> = ({ onBack }) => {
 
   const loadConfig = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/config');
+      const res = await fetch('/api/config');
       const data = await res.json();
       setConfig({
         enable_online_checkout: data.enable_online_checkout ?? true,
@@ -38,7 +38,7 @@ export const PaymentSettings: React.FC<PaymentSettingsProps> = ({ onBack }) => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await fetch('http://localhost:3001/api/config', {
+      await fetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)

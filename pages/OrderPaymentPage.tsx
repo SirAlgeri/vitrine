@@ -17,7 +17,7 @@ export const OrderPaymentPage: React.FC = () => {
 
   const loadOrder = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/orders/${orderId}`);
+      const res = await fetch(`/api/orders/${orderId}`);
       const data = await res.json();
       
       if (data.payment_status !== 'pending' && data.payment_status !== 'PAYMENT_PENDING') {
@@ -40,7 +40,7 @@ export const OrderPaymentPage: React.FC = () => {
 
   const handleConfirmOrder = async () => {
     try {
-      await fetch(`http://localhost:3001/api/orders/${orderId}/payment`, {
+      await fetch(`/api/orders/${orderId}/payment`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

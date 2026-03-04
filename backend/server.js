@@ -14,7 +14,9 @@ import {
   updateOrderStatus,
   updateOrderStatusManual 
 } from './statusManager.js';
-import { sendOrderStatusEmail } from './emailService.js';
+// SMTP Email Service (substitui AWS SES)
+import { sendOrderStatusEmail, sendVerificationEmail } from './smtpEmailService.js';
+import { tenantMiddleware } from './middleware/tenant.js';
 
 dotenv.config();
 
@@ -27,7 +29,13 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
-
+// Tenant middleware
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/admin/tenants')) {
+    return next();
+  }
+  return tenantMiddleware(req, res, next);
+});
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -36,8 +44,17 @@ app.get('/api/health', (req, res) => {
 // ========== CONFIG ==========
 app.get('/api/config', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM config LIMIT 1');
+    const result = await pool.query('SELECT * FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id]);
     res.json(result.rows[0] || {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== TENANT ==========
+app.get('/api/tenant/current', async (req, res) => {
+  try {
+    res.json(req.tenant);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -48,10 +65,8 @@ app.put('/api/config', async (req, res) => {
     const { 
       store_name, primary_color, secondary_color, whatsapp_number, logo_url, 
       enable_online_checkout, enable_whatsapp_checkout, payment_methods, 
-      markup_percentage, cep_origem,
-      background_color, card_color, surface_color, text_primary_color, 
-      text_secondary_color, border_color, button_primary_color, 
-      button_primary_hover_color, button_secondary_color, button_secondary_hover_color
+      markup_percentage, cep_origem, enable_pickup, pickup_address,
+      smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, smtp_from_name
     } = req.body;
     
     // Construir query dinamicamente baseado nos campos enviados
@@ -107,55 +122,52 @@ app.put('/api/config', async (req, res) => {
       updates.push(`cep_origem = $${paramCount++}`);
       values.push(cleanCep);
     }
+    if (enable_pickup !== undefined) {
+      updates.push(`enable_pickup = $${paramCount++}`);
+      values.push(enable_pickup);
+    }
+    if (pickup_address !== undefined) {
+      updates.push(`pickup_address = $${paramCount++}`);
+      values.push(pickup_address);
+    }
     
-    // Cores personalizadas
-    if (background_color !== undefined) {
-      updates.push(`background_color = $${paramCount++}`);
-      values.push(background_color);
+    // Campos SMTP
+    if (smtp_host !== undefined) {
+      updates.push(`smtp_host = $${paramCount++}`);
+      values.push(smtp_host);
     }
-    if (card_color !== undefined) {
-      updates.push(`card_color = $${paramCount++}`);
-      values.push(card_color);
+    if (smtp_port !== undefined) {
+      updates.push(`smtp_port = $${paramCount++}`);
+      values.push(smtp_port);
     }
-    if (surface_color !== undefined) {
-      updates.push(`surface_color = $${paramCount++}`);
-      values.push(surface_color);
+    if (smtp_secure !== undefined) {
+      updates.push(`smtp_secure = $${paramCount++}`);
+      values.push(smtp_secure);
     }
-    if (text_primary_color !== undefined) {
-      updates.push(`text_primary_color = $${paramCount++}`);
-      values.push(text_primary_color);
+    if (smtp_user !== undefined) {
+      updates.push(`smtp_user = $${paramCount++}`);
+      values.push(smtp_user);
     }
-    if (text_secondary_color !== undefined) {
-      updates.push(`text_secondary_color = $${paramCount++}`);
-      values.push(text_secondary_color);
+    if (smtp_pass !== undefined) {
+      updates.push(`smtp_pass = $${paramCount++}`);
+      values.push(smtp_pass);
     }
-    if (border_color !== undefined) {
-      updates.push(`border_color = $${paramCount++}`);
-      values.push(border_color);
+    if (smtp_from !== undefined) {
+      updates.push(`smtp_from = $${paramCount++}`);
+      values.push(smtp_from);
     }
-    if (button_primary_color !== undefined) {
-      updates.push(`button_primary_color = $${paramCount++}`);
-      values.push(button_primary_color);
-    }
-    if (button_primary_hover_color !== undefined) {
-      updates.push(`button_primary_hover_color = $${paramCount++}`);
-      values.push(button_primary_hover_color);
-    }
-    if (button_secondary_color !== undefined) {
-      updates.push(`button_secondary_color = $${paramCount++}`);
-      values.push(button_secondary_color);
-    }
-    if (button_secondary_hover_color !== undefined) {
-      updates.push(`button_secondary_hover_color = $${paramCount++}`);
-      values.push(button_secondary_hover_color);
+    if (smtp_from_name !== undefined) {
+      updates.push(`smtp_from_name = $${paramCount++}`);
+      values.push(smtp_from_name);
     }
     
     if (updates.length === 0) {
       return res.status(400).json({ error: 'Nenhum campo para atualizar' });
     }
     
+    values.push(req.tenant.id);
     const result = await pool.query(
-      `UPDATE config SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = 1 RETURNING *`,
+      `UPDATE config SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE tenant_id = $${paramCount} RETURNING *`,
       values
     );
     res.json(result.rows[0]);
@@ -169,43 +181,26 @@ app.post('/api/frete/calcular', async (req, res) => {
   try {
     const { cepOrigem, cepDestino, peso, comprimento, altura, largura } = req.body;
     
-    const postData = JSON.stringify({
-      cepOrigem,
-      cepDestino,
-      peso: peso || 0.3,
-      comprimento: comprimento || 16,
-      altura: altura || 2,
-      largura: largura || 11
-    });
-
-    const options = {
-      hostname: 'localhost',
-      port: 5001,
-      path: '/calcular',
+    const freteUrl = process.env.FRETE_SERVICE_URL || 'http://localhost:5001/calcular';
+    
+    const response = await fetch(freteUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    };
-
-    const resultado = await new Promise((resolve, reject) => {
-      const req = http.request(options, (response) => {
-        let data = '';
-        response.on('data', (chunk) => { data += chunk; });
-        response.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (e) {
-            reject(new Error('Resposta inválida do serviço de frete'));
-          }
-        });
-      });
-      req.on('error', reject);
-      req.write(postData);
-      req.end();
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cepOrigem,
+        cepDestino,
+        peso: peso || 0.3,
+        comprimento: comprimento || 16,
+        altura: altura || 2,
+        largura: largura || 11
+      })
     });
 
+    if (!response.ok) {
+      throw new Error('Erro ao calcular frete');
+    }
+
+    const resultado = await response.json();
     res.json(resultado);
   } catch (err) {
     console.error('Erro ao calcular frete:', err);
@@ -217,12 +212,15 @@ app.post('/api/frete/calcular', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    // Accept both username and email (for backwards compatibility)
-    const emailOrUsername = username;
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [emailOrUsername]);
+    
+    // Buscar usuário do tenant atual
+    const result = await pool.query(
+      'SELECT * FROM users WHERE username = $1 AND tenant_id = $2', 
+      [username, req.tenant.id]
+    );
     
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Credenciais inválidas' });
+      return res.status(401).json({ error: 'Credenciais inválidas para este tenant' });
     }
 
     const user = result.rows[0];
@@ -232,18 +230,92 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
-    res.json({ success: true, username: user.username });
+    res.json({ success: true, username: user.username, tenant_id: user.tenant_id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ========== CUSTOMER AUTH ==========
+
+// Gerar e enviar código de verificação
+app.post('/api/customers/send-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Verificar se email já está cadastrado
+    const existing = await pool.query('SELECT id FROM customers WHERE email = $1 AND tenant_id = $2', [email, req.tenant.id]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Email já cadastrado' });
+    }
+    
+    // Gerar código de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+    
+    // Salvar código no banco
+    await pool.query(
+      'INSERT INTO email_verifications (email, code, expires_at, tenant_id) VALUES ($1, $2, $3, $4)',
+      [email, code, expiresAt, req.tenant.id]
+    );
+    
+    // Buscar config para personalizar email
+    const configResult = await pool.query('SELECT * FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id]);
+    const config = configResult.rows[0] || {};
+    
+    // Enviar email
+    const emailResult = await sendVerificationEmail(email, code, config);
+    
+    if (!emailResult.success) {
+      return res.status(500).json({ error: 'Erro ao enviar email' });
+    }
+    
+    res.json({ success: true, message: 'Código enviado para o email' });
+  } catch (err) {
+    console.error('Erro ao enviar verificação:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Verificar código
+app.post('/api/customers/verify-code', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    
+    const result = await pool.query(
+      `SELECT * FROM email_verifications 
+       WHERE email = $1 AND code = $2 AND verified = FALSE AND expires_at > NOW() AND tenant_id = $3
+       ORDER BY created_at DESC LIMIT 1`,
+      [email, code, req.tenant.id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Código inválido ou expirado' });
+    }
+    
+    // Marcar como verificado
+    await pool.query(
+      'UPDATE email_verifications SET verified = TRUE WHERE id = $1',
+      [result.rows[0].id]
+    );
+    
+    res.json({ success: true, message: 'Email verificado com sucesso' });
+  } catch (err) {
+    console.error('Erro ao verificar código:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/customers/register', async (req, res) => {
   try {
-    const { nome_completo, email, senha, telefone, aceita_marketing } = req.body;
+    const { nome_completo, email, senha, telefone, aceita_marketing, email_verified } = req.body;
     
-    const existing = await pool.query('SELECT id FROM customers WHERE email = $1', [email]);
+    // Verificar se email foi verificado
+    if (!email_verified) {
+      return res.status(400).json({ error: 'Email não verificado' });
+    }
+    
+    const existing = await pool.query('SELECT id FROM customers WHERE email = $1 AND tenant_id = $2', [email, req.tenant.id]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
@@ -252,9 +324,9 @@ app.post('/api/customers/register', async (req, res) => {
     const senha_hash = await bcrypt.hash(senha, 10);
     
     const result = await pool.query(
-      `INSERT INTO customers (id, nome_completo, email, senha_hash, telefone, aceita_marketing)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, nome_completo, email, telefone, aceita_marketing, status, criado_em`,
-      [id, nome_completo, email, senha_hash, telefone, aceita_marketing || false]
+      `INSERT INTO customers (id, nome_completo, email, senha_hash, telefone, aceita_marketing, email_verified, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7) RETURNING id, nome_completo, email, telefone, aceita_marketing, status, criado_em, email_verified`,
+      [id, nome_completo, email, senha_hash, telefone, aceita_marketing || false, req.tenant.id]
     );
     
     res.status(201).json({ customer: result.rows[0] });
@@ -267,7 +339,7 @@ app.post('/api/customers/login', async (req, res) => {
   try {
     const { email, senha } = req.body;
     
-    const result = await pool.query('SELECT * FROM customers WHERE email = $1 AND deletado_em IS NULL', [email]);
+    const result = await pool.query('SELECT * FROM customers WHERE email = $1 AND deletado_em IS NULL AND tenant_id = $2', [email, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Email ou senha inválidos' });
     }
@@ -288,7 +360,7 @@ app.post('/api/customers/login', async (req, res) => {
     }
     
     // Update last login
-    await pool.query('UPDATE customers SET ultimo_login_em = CURRENT_TIMESTAMP WHERE id = $1', [customer.id]);
+    await pool.query('UPDATE customers SET ultimo_login_em = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2', [customer.id, req.tenant.id]);
     
     delete customer.senha_hash;
     res.json({ customer });
@@ -314,10 +386,10 @@ app.post('/api/customers', async (req, res) => {
     const { nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado } = req.body;
     
     const result = await pool.query(
-      `INSERT INTO customers (id, nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado, status, senha_hash)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ativo', '')
+      `INSERT INTO customers (id, nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado, status, senha_hash, tenant_id)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ativo', '', $12)
        RETURNING id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado`,
-      [nome_completo, telefone || '', cpf || null, email || null, cep || null, endereco || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null]
+      [nome_completo, telefone || '', cpf || null, email || null, cep || null, endereco || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null, req.tenant.id]
     );
     
     res.status(201).json(result.rows[0]);
@@ -349,9 +421,9 @@ app.put('/api/customers/:id', async (req, res) => {
     
     const result = await pool.query(
       `UPDATE customers SET nome_completo = $1, telefone = $2, cpf = $3, cep = $4, endereco = $5, numero = $6, complemento = $7, bairro = $8, cidade = $9, estado = $10, aceita_marketing = $11
-       WHERE id = $12 AND deletado_em IS NULL
+       WHERE id = $12 AND deletado_em IS NULL AND tenant_id = $13
        RETURNING id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, status, criado_em, ultimo_login_em`,
-      [nome_completo, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, req.params.id]
+      [nome_completo, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, req.params.id, req.tenant.id]
     );
     
     if (result.rows.length === 0) {
@@ -368,7 +440,7 @@ app.put('/api/customers/:id/password', async (req, res) => {
   try {
     const { senha_atual, senha_nova } = req.body;
     
-    const result = await pool.query('SELECT senha_hash FROM customers WHERE id = $1 AND deletado_em IS NULL', [req.params.id]);
+    const result = await pool.query('SELECT senha_hash FROM customers WHERE id = $1 AND deletado_em IS NULL AND tenant_id = $2', [req.params.id, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Cliente não encontrado' });
     }
@@ -379,7 +451,7 @@ app.put('/api/customers/:id/password', async (req, res) => {
     }
     
     const senha_hash = await bcrypt.hash(senha_nova, 10);
-    await pool.query('UPDATE customers SET senha_hash = $1 WHERE id = $2', [senha_hash, req.params.id]);
+    await pool.query('UPDATE customers SET senha_hash = $1 WHERE id = $2 AND tenant_id = $3', [senha_hash, req.params.id, req.tenant.id]);
     
     res.json({ success: true });
   } catch (err) {
@@ -389,7 +461,7 @@ app.put('/api/customers/:id/password', async (req, res) => {
 
 app.delete('/api/customers/:id', async (req, res) => {
   try {
-    await pool.query('UPDATE customers SET deletado_em = CURRENT_TIMESTAMP, status = $1 WHERE id = $2', ['inativo', req.params.id]);
+    await pool.query('UPDATE customers SET deletado_em = CURRENT_TIMESTAMP, status = $1 WHERE id = $2 AND tenant_id = $3', ['inativo', req.params.id, req.tenant.id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -432,15 +504,15 @@ app.post('/api/customers/:id/addresses', async (req, res) => {
     // If setting as default, unset other defaults
     if (is_default) {
       await client.query(
-        'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1',
-        [req.params.id]
+        'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1 AND tenant_id = $2',
+        [req.params.id, req.tenant.id]
       );
     }
     
     const result = await client.query(
-      `INSERT INTO customer_addresses (id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [id, req.params.id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default || false]
+      `INSERT INTO customer_addresses (id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [id, req.params.id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default || false, req.tenant.id]
     );
     
     await client.query('COMMIT');
@@ -496,19 +568,26 @@ app.delete('/api/addresses/:id', async (req, res) => {
 app.get('/api/products', async (req, res) => {
   const client = await pool.connect();
   try {
-    const productsResult = await client.query('SELECT * FROM products ORDER BY created_at DESC');
+    const productsResult = await client.query('SELECT * FROM products WHERE tenant_id = $1 ORDER BY created_at DESC', [req.tenant.id]);
     const products = productsResult.rows;
     
-    // Load custom fields for each product
+    // Load custom fields and images for each product
     for (const product of products) {
       const fieldsResult = await client.query(
-        'SELECT field_id, value FROM product_fields WHERE product_id = $1',
-        [product.id]
+        'SELECT field_id, value FROM product_fields WHERE product_id = $1 AND tenant_id = $2',
+        [product.id, req.tenant.id]
       );
       product.fields = {};
       fieldsResult.rows.forEach(row => {
         product.fields[row.field_id] = row.value;
       });
+      
+      // Load images
+      const imagesResult = await client.query(
+        'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
+        [product.id, req.tenant.id]
+      );
+      product.images = imagesResult.rows.map(row => row.image);
     }
     
     res.json(products);
@@ -522,20 +601,28 @@ app.get('/api/products', async (req, res) => {
 app.get('/api/products/:id', async (req, res) => {
   const client = await pool.connect();
   try {
-    const result = await client.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    const result = await client.query('SELECT * FROM products WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
     
     const product = result.rows[0];
     const fieldsResult = await client.query(
-      'SELECT field_id, value FROM product_fields WHERE product_id = $1',
-      [product.id]
+      'SELECT field_id, value FROM product_fields WHERE product_id = $1 AND tenant_id = $2',
+      [product.id, req.tenant.id]
     );
     product.fields = {};
     fieldsResult.rows.forEach(row => {
       product.fields[row.field_id] = row.value;
     });
+    
+    // Load images
+    const imagesResult = await client.query(
+      'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
+      [product.id, req.tenant.id]
+      [product.id]
+    );
+    product.images = imagesResult.rows.map(row => row.image);
     
     res.json(product);
   } catch (err) {
@@ -550,19 +637,29 @@ app.post('/api/products', async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    const { id, name, price, description, image, fields } = req.body;
+    const { id, name, price, description, image, images, stock_quantity, fields } = req.body;
     const result = await client.query(
-      'INSERT INTO products (id, name, price, description, image) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [id, name, price, description, image]
+      'INSERT INTO products (id, name, price, description, image, stock_quantity, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [id, name, price, description, image, stock_quantity || 1, req.tenant.id]
     );
+    
+    // Save multiple images
+    if (images && Array.isArray(images)) {
+      for (let i = 0; i < Math.min(images.length, 10); i++) {
+        await client.query(
+          'INSERT INTO product_images (product_id, image, image_order, tenant_id) VALUES ($1, $2, $3, $4)',
+          [id, images[i], i, req.tenant.id]
+        );
+      }
+    }
     
     // Save custom fields
     if (fields) {
       for (const [fieldId, value] of Object.entries(fields)) {
         if (value) {
           await client.query(
-            'INSERT INTO product_fields (product_id, field_id, value) VALUES ($1, $2, $3)',
-            [id, fieldId, value]
+            'INSERT INTO product_fields (product_id, field_id, value, tenant_id) VALUES ($1, $2, $3, $4)',
+            [id, fieldId, value, req.tenant.id]
           );
         }
       }
@@ -583,10 +680,10 @@ app.put('/api/products/:id', async (req, res) => {
   try {
     await client.query('BEGIN');
     
-    const { name, price, description, image, fields } = req.body;
+    const { name, price, description, image, images, stock_quantity, fields } = req.body;
     const result = await client.query(
-      'UPDATE products SET name = $1, price = $2, description = $3, image = $4 WHERE id = $5 RETURNING *',
-      [name, price, description, image, req.params.id]
+      'UPDATE products SET name = $1, price = $2, description = $3, image = $4, stock_quantity = $5 WHERE id = $6 AND tenant_id = $7 RETURNING *',
+      [name, price, description, image, stock_quantity !== undefined ? stock_quantity : 1, req.params.id, req.tenant.id]
     );
     
     if (result.rows.length === 0) {
@@ -594,16 +691,27 @@ app.put('/api/products/:id', async (req, res) => {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
     
+    // Update multiple images
+    if (images && Array.isArray(images)) {
+      await client.query('DELETE FROM product_images WHERE product_id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
+      for (let i = 0; i < Math.min(images.length, 10); i++) {
+        await client.query(
+          'INSERT INTO product_images (product_id, image, image_order, tenant_id) VALUES ($1, $2, $3, $4)',
+          [req.params.id, images[i], i, req.tenant.id]
+        );
+      }
+    }
+    
     // Delete old custom fields
-    await client.query('DELETE FROM product_fields WHERE product_id = $1', [req.params.id]);
+    await client.query('DELETE FROM product_fields WHERE product_id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
     
     // Save new custom fields
     if (fields) {
       for (const [fieldId, value] of Object.entries(fields)) {
         if (value) {
           await client.query(
-            'INSERT INTO product_fields (product_id, field_id, value) VALUES ($1, $2, $3)',
-            [req.params.id, fieldId, value]
+            'INSERT INTO product_fields (product_id, field_id, value, tenant_id) VALUES ($1, $2, $3, $4)',
+            [req.params.id, fieldId, value, req.tenant.id]
           );
         }
       }
@@ -621,7 +729,7 @@ app.put('/api/products/:id', async (req, res) => {
 
 app.delete('/api/products/:id', async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM products WHERE id = $1 RETURNING *', [req.params.id]);
+    const result = await pool.query('DELETE FROM products WHERE id = $1 AND tenant_id = $2 RETURNING *', [req.params.id, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
@@ -634,8 +742,13 @@ app.delete('/api/products/:id', async (req, res) => {
 // ========== FIELD DEFINITIONS ==========
 app.get('/api/field-definitions', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM field_definitions ORDER BY field_order');
-    res.json(result.rows);
+    const result = await pool.query('SELECT * FROM field_definitions WHERE tenant_id = $1 ORDER BY field_order', [req.tenant.id]);
+    // Parse options de string JSON para array
+    const fields = result.rows.map(field => ({
+      ...field,
+      options: field.options ? JSON.parse(field.options) : null
+    }));
+    res.json(fields);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -645,10 +758,12 @@ app.post('/api/field-definitions', async (req, res) => {
   try {
     const { id, field_name, field_type, field_order, options } = req.body;
     const result = await pool.query(
-      'INSERT INTO field_definitions (id, field_name, field_type, is_default, can_delete, field_order, options) VALUES ($1, $2, $3, false, true, $4, $5) RETURNING *',
-      [id, field_name, field_type, field_order || 0, options]
+      'INSERT INTO field_definitions (id, field_name, field_type, is_default, can_delete, field_order, options, tenant_id) VALUES ($1, $2, $3, false, true, $4, $5, $6) RETURNING *',
+      [id, field_name, field_type, field_order || 0, options, req.tenant.id]
     );
-    res.status(201).json(result.rows[0]);
+    const field = result.rows[0];
+    field.options = field.options ? JSON.parse(field.options) : null;
+    res.status(201).json(field);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -658,8 +773,8 @@ app.put('/api/field-definitions/:id', async (req, res) => {
   try {
     const { field_name, field_type } = req.body;
     const result = await pool.query(
-      'UPDATE field_definitions SET field_name = $1, field_type = $2 WHERE id = $3 AND can_delete = true RETURNING *',
-      [field_name, field_type, req.params.id]
+      'UPDATE field_definitions SET field_name = $1, field_type = $2 WHERE id = $3 AND can_delete = true AND tenant_id = $4 RETURNING *',
+      [field_name, field_type, req.params.id, req.tenant.id]
     );
     if (result.rows.length === 0) {
       return res.status(403).json({ error: 'Campo não pode ser editado' });
@@ -673,8 +788,8 @@ app.put('/api/field-definitions/:id', async (req, res) => {
 app.delete('/api/field-definitions/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      'DELETE FROM field_definitions WHERE id = $1 AND can_delete = true RETURNING *',
-      [req.params.id]
+      'DELETE FROM field_definitions WHERE id = $1 AND can_delete = true AND tenant_id = $2 RETURNING *',
+      [req.params.id, req.tenant.id]
     );
     if (result.rows.length === 0) {
       return res.status(403).json({ error: 'Campo não pode ser deletado' });
@@ -707,39 +822,47 @@ app.post('/api/orders', async (req, res) => {
     
     const orderResult = await client.query(
       `INSERT INTO orders 
-       (customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at || new Date()]
+       (customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at, tenant_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at || new Date(), req.tenant.id]
     );
     
     const order = orderResult.rows[0];
     
     for (const item of items) {
       await client.query(
-        'INSERT INTO order_items (order_id, product_id, product_name, product_price, product_image, quantity, subtotal) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [order.id, item.product_id || item.id, item.product_name || item.name, item.product_price || item.price, item.product_image || item.image, item.quantity, item.subtotal || (item.price * item.quantity)]
+        'INSERT INTO order_items (order_id, product_id, product_name, product_price, product_image, quantity, subtotal, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [order.id, item.product_id || item.id, item.product_name || item.name, item.product_price || item.price, item.product_image || item.image, item.quantity, item.subtotal || (item.price * item.quantity), req.tenant.id]
       );
+      
+      // Deduzir do estoque se pagamento aprovado
+      if (payment_status === PaymentStatus.APPROVED) {
+        await client.query(
+          'UPDATE products SET stock_quantity = GREATEST(stock_quantity - $1, 0) WHERE id = $2 AND tenant_id = $3',
+          [item.quantity, item.product_id || item.id, req.tenant.id]
+        );
+      }
     }
     
     // Registrar histórico inicial
     await client.query(
       `INSERT INTO order_status_history 
-       (order_id, new_payment_status, new_order_status, changed_by, notes)
-       VALUES ($1, $2, $3, 'system', 'Pedido criado')`,
-      [order.id, payment_status, order_status]
+       (order_id, new_payment_status, new_order_status, changed_by, notes, tenant_id)
+       VALUES ($1, $2, $3, 'system', 'Pedido criado', $4)`,
+      [order.id, payment_status, order_status, req.tenant.id]
     );
     
     await client.query('COMMIT');
     
     // Enviar email de confirmação (não bloqueia o fluxo)
     if (customer_id) {
-      pool.query('SELECT email FROM customers WHERE id = $1', [customer_id])
+      pool.query('SELECT email FROM customers WHERE id = $1 AND tenant_id = $2', [customer_id, req.tenant.id])
         .then(customerResult => {
           if (customerResult.rows[0]?.email) {
             const customerEmail = customerResult.rows[0].email;
             
             // Buscar config para cores
-            return pool.query('SELECT primary_color, secondary_color, store_name FROM config LIMIT 1')
+            return pool.query('SELECT primary_color, secondary_color, store_name FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id])
               .then(configResult => {
                 const config = configResult.rows[0] || {};
                 const orderWithEmail = {
@@ -915,12 +1038,12 @@ app.put('/api/orders/:id/status', async (req, res) => {
           'product_image', p.image
         )) as items
       FROM orders o
-      LEFT JOIN customers c ON o.customer_id = c.id
-      LEFT JOIN order_items oi ON o.id = oi.order_id
-      LEFT JOIN products p ON oi.product_id = p.id
-      WHERE o.id = $1
+      LEFT JOIN customers c ON o.customer_id = c.id AND c.tenant_id = $2
+      LEFT JOIN order_items oi ON o.id = oi.order_id AND oi.tenant_id = $2
+      LEFT JOIN products p ON oi.product_id = p.id AND p.tenant_id = $2
+      WHERE o.id = $1 AND o.tenant_id = $2
       GROUP BY o.id, c.email
-    `, [req.params.id]);
+    `, [req.params.id, req.tenant.id]);
     
     const order = orderResult.rows[0];
     console.log('📦 Pedido encontrado:', order ? 'Sim' : 'Não');
@@ -928,15 +1051,15 @@ app.put('/api/orders/:id/status', async (req, res) => {
     console.log('🔄 Atualizando status...');
     
     // Atualizar status
-    const result = await updateOrderStatusManual(pool, req.params.id, order_status, 'admin', notes);
+    const result = await updateOrderStatusManual(pool, req.params.id, order_status, 'admin', notes, req.tenant.id);
     
     console.log('✅ Status atualizado:', result);
     
     // Atualizar rastreio se fornecido
     if (tracking_code || delivery_deadline) {
       await pool.query(
-        'UPDATE orders SET tracking_code = $1, delivery_deadline = $2 WHERE id = $3',
-        [tracking_code || null, delivery_deadline || null, req.params.id]
+        'UPDATE orders SET tracking_code = $1, delivery_deadline = $2 WHERE id = $3 AND tenant_id = $4',
+        [tracking_code || null, delivery_deadline || null, req.params.id, req.tenant.id]
       );
       
       // Atualizar objeto order com novos valores
@@ -953,7 +1076,7 @@ app.put('/api/orders/:id/status', async (req, res) => {
       });
       
       // Buscar configurações para cores
-      pool.query('SELECT primary_color, secondary_color, store_name FROM config LIMIT 1')
+      pool.query('SELECT primary_color, secondary_color, store_name FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id])
         .then(configResult => {
           const config = configResult.rows[0] || {};
           return sendOrderStatusEmail(order, order_status, config);
@@ -971,6 +1094,7 @@ app.put('/api/orders/:id/status', async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+
 
 // Atualizar pagamento do pedido
 app.put('/api/orders/:id/payment', async (req, res) => {

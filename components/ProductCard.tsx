@@ -12,6 +12,7 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAddToCart, markupPercentage = 0 }) => {
   const finalPrice = applyMarkup(product.price, markupPercentage);
+  const outOfStock = (product.stock_quantity || 0) === 0;
   
   return (
     <div 
@@ -23,12 +24,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
         onClick={() => onClick(product)}
       >
         {product.image ? (
-          <img 
-            src={product.image} 
-            alt={product.name} 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            loading="lazy"
-          />
+          <>
+            <img 
+              src={product.image} 
+              alt={product.name} 
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              loading="lazy"
+            />
+            
+            {/* Indicador de múltiplas fotos */}
+            {product.images && product.images.length > 1 && (
+              <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                <Eye className="w-3 h-3" />
+                {product.images.length}
+              </div>
+            )}
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center text-slate-600">
             <span className="text-sm">Sem imagem</span>
@@ -42,6 +53,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
             Ver Detalhes
           </span>
         </div>
+        
+        {/* Badge Fora de Estoque */}
+        {outOfStock && (
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+            <span className="bg-red-600 text-white px-4 py-2 rounded-full text-sm font-bold">
+              FORA DE ESTOQUE
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="p-4 flex flex-col flex-grow">
@@ -60,10 +80,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onAddToCart(product);
+              if (!outOfStock) onAddToCart(product);
             }}
-            className="w-10 h-10 rounded-full bg-slate-700 hover:bg-primary text-slate-300 hover:text-white flex items-center justify-center transition-all active:scale-95 shadow-lg"
-            title="Adicionar ao Carrinho"
+            disabled={outOfStock}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg ${
+              outOfStock 
+                ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
+                : 'bg-slate-700 hover:bg-primary text-slate-300 hover:text-white active:scale-95'
+            }`}
+            title={outOfStock ? 'Fora de Estoque' : 'Adicionar ao Carrinho'}
           >
             <ShoppingCart className="w-5 h-5" />
           </button>

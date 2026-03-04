@@ -31,7 +31,7 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
 
   const loadOrders = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/orders');
+      const res = await fetch('/api/orders');
       const data = await res.json();
       setOrders(data);
     } catch (err) {

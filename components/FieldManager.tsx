@@ -20,7 +20,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
   }, []);
 
   const loadFields = async () => {
-    const res = await fetch('http://localhost:3001/api/field-definitions');
+    const res = await fetch('/api/field-definitions');
     setFields(await res.json());
   };
 
@@ -35,7 +35,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
       return;
     }
     
-    await fetch('http://localhost:3001/api/field-definitions', {
+    await fetch('/api/field-definitions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -64,7 +64,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
 
   const deleteField = async (id: string) => {
     if (!confirm('Deletar campo?')) return;
-    const res = await fetch(`http://localhost:3001/api/field-definitions/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/field-definitions/${id}`, { method: 'DELETE' });
     if (res.ok) loadFields();
     else alert('Este campo não pode ser deletado');
   };
@@ -172,7 +172,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
                   </div>
                   {field.field_type === 'select' && field.options && (
                     <div className="flex flex-wrap gap-1 mt-2">
-                      {JSON.parse(field.options).map((opt: string, i: number) => (
+                      {field.options.map((opt: string, i: number) => (
                         <span key={i} className="px-2 py-1 bg-slate-700 rounded text-xs text-slate-300">
                           {opt}
                         </span>

@@ -4,6 +4,7 @@ import { AdminDashboard } from '../components/AdminDashboard';
 import { ProductForm } from '../components/ProductForm';
 import { FieldManager } from '../components/FieldManager';
 import { PaymentSettings } from '../components/PaymentSettings';
+import SmtpSettings from '../components/SmtpSettings';
 import { SalesDashboard } from '../components/SalesDashboard';
 import { api } from '../services/api';
 import { Product, AppConfig } from '../types';
@@ -15,7 +16,7 @@ interface AdminPageProps {
 }
 
 export const AdminPage: React.FC<AdminPageProps> = ({ isAuthenticated, config, onUpdateConfig }) => {
-  const [view, setView] = useState<'dashboard' | 'form' | 'fields' | 'payments' | 'sales'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'form' | 'fields' | 'payments' | 'smtp' | 'sales'>('dashboard');
   const [products, setProducts] = useState<Product[]>([]);
   const [editingProduct, setEditingProduct] = useState<Product | undefined>(undefined);
   const [loading, setLoading] = useState(true);
@@ -95,6 +96,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ isAuthenticated, config, o
     return <PaymentSettings onBack={() => setView('dashboard')} />;
   }
 
+  if (view === 'smtp') {
+    return <SmtpSettings onBack={() => setView('dashboard')} />;
+  }
+
   if (view === 'sales') {
     return <SalesDashboard onBack={() => setView('dashboard')} />;
   }
@@ -111,6 +116,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ isAuthenticated, config, o
       onUpdateConfig={onUpdateConfig}
       onManageCategories={() => setView('fields')}
       onManagePayments={() => setView('payments')}
+      onManageSmtp={() => setView('smtp')}
       onViewSales={() => setView('sales')}
       successMessage={successMessage}
     />

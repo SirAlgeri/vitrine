@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Product, AppConfig } from '../types';
-import { Plus, Edit2, Trash2, Settings, Palette, Save, Tag, CreditCard, BarChart3 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Settings, Palette, Save, Tag, CreditCard, BarChart3, Mail } from 'lucide-react';
 import { formatPhone } from '../services/validators';
 
 interface AdminDashboardProps {
@@ -11,6 +11,7 @@ interface AdminDashboardProps {
   onUpdateConfig: (newConfig: AppConfig) => void;
   onManageCategories: () => void;
   onManagePayments: () => void;
+  onManageSmtp: () => void;
   onViewSales: () => void;
   successMessage?: string;
 }
@@ -23,6 +24,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateConfig,
   onManageCategories,
   onManagePayments,
+  onManageSmtp,
   onViewSales,
   successMessage
 }) => {
@@ -91,6 +93,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             title="Métodos de Pagamento"
           >
             <CreditCard className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onManageSmtp}
+            className="p-2.5 rounded-lg border bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+            title="Configurar Email (SMTP)"
+          >
+            <Mail className="w-5 h-5" />
           </button>
           <button
             onClick={() => setShowConfig(!showConfig)}
@@ -195,6 +204,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
               />
               <p className="text-xs text-slate-500 mt-1">CEP para cálculo de frete</p>
+            </div>
+
+            <div className="border border-slate-700 rounded-lg p-4 bg-slate-900/50">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tempConfig.enablePickup || false}
+                  onChange={(e) => setTempConfig({...tempConfig, enablePickup: e.target.checked})}
+                  className="w-5 h-5 rounded border-slate-600 text-primary focus:ring-primary focus:ring-offset-slate-900"
+                />
+                <div>
+                  <span className="text-sm font-medium text-white">Habilitar Retirada Pessoal</span>
+                  <p className="text-xs text-slate-500">Permitir que clientes retirem pedidos no local (frete R$ 0,00)</p>
+                </div>
+              </label>
+              {tempConfig.enablePickup && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-slate-400 mb-2">Endereço para Retirada</label>
+                  <textarea
+                    value={tempConfig.pickupAddress || ''}
+                    onChange={(e) => setTempConfig({...tempConfig, pickupAddress: e.target.value})}
+                    placeholder="Ex: Rua Exemplo, 123 - Centro - São Paulo/SP"
+                    rows={2}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-primary transition-colors resize-none"
+                  />
+                </div>
+              )}
             </div>
 
             <div>
