@@ -1,0 +1,243 @@
+/* Variáveis CSS personalizáveis */
+:root {
+  --color-background: #ffffff;
+  --color-card: #ffffff;
+  --color-surface: #f9f9f9;
+  --color-text-primary: #000000;
+  --color-text-secondary: #666666;
+  --color-border: #e5e7eb;
+  --color-button-primary: #3b82f6;
+  --color-button-primary-hover: #2563eb;
+  --color-button-secondary: #6b7280;
+  --color-button-secondary-hover: #4b5563;
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-button-primary);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-button-primary-hover);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-button-primary) var(--color-surface);
+}
+
+/* Classes utilitárias para cores personalizadas */
+.bg-custom-background {
+  background-color: var(--color-background);
+}
+
+.bg-custom-card {
+  background-color: var(--color-card);
+}
+
+.bg-custom-surface {
+  background-color: var(--color-surface);
+}
+
+.text-custom-primary {
+  color: var(--color-text-primary);
+}
+
+.text-custom-secondary {
+  color: var(--color-text-secondary);
+}
+
+.border-custom {
+  border-color: var(--color-border);
+}
+
+.bg-custom-btn-primary {
+  background-color: var(--color-button-primary);
+}
+
+.bg-custom-btn-primary:hover {
+  background-color: var(--color-button-primary-hover);
+}
+
+.bg-custom-btn-secondary {
+  background-color: var(--color-button-secondary);
+}
+
+.bg-custom-btn-secondary:hover {
+  background-color: var(--color-button-secondary-hover);
+}
+
+/* Sobrescrever cores do Tailwind com as personalizadas */
+.bg-slate-900,
+.bg-slate-900\/90 {
+  background-color: var(--color-card) !important;
+}
+
+.bg-slate-800 {
+  background-color: var(--color-surface) !important;
+}
+
+.bg-slate-800\/50 {
+  background-color: var(--color-surface) !important;
+  opacity: 0.5;
+}
+
+.bg-slate-700,
+.bg-slate-700\/50 {
+  background-color: var(--color-card) !important;
+}
+
+.bg-slate-600 {
+  background-color: var(--color-surface) !important;
+}
+
+.border-slate-800,
+.border-slate-700,
+.border-slate-600,
+.border-slate-500 {
+  border-color: var(--color-border) !important;
+}
+
+.divide-slate-700 > * + * {
+  border-color: var(--color-border) !important;
+}
+
+.text-slate-400,
+.text-slate-300 {
+  color: var(--color-text-secondary) !important;
+}
+
+.text-slate-500 {
+  color: var(--color-text-secondary) !important;
+}
+
+.text-white {
+  color: var(--color-text-primary) !important;
+}
+
+/* Gradientes de texto */
+.from-white {
+  --tw-gradient-from: var(--color-button-primary) !important;
+}
+
+.to-slate-400 {
+  --tw-gradient-to: var(--color-button-primary-hover) !important;
+}
+
+.bg-primary,
+.bg-blue-600 {
+  background-color: var(--color-button-primary) !important;
+}
+
+/* Status badges - manter fundo original mas mudar texto para cor primária quando ativo */
+.text-blue-300,
+.text-blue-400 {
+  color: var(--color-button-primary) !important;
+}
+
+.text-green-300,
+.text-green-400 {
+  color: var(--color-text-primary) !important;
+}
+
+.text-yellow-300,
+.text-yellow-400 {
+  color: var(--color-text-primary) !important;
+}
+
+.text-red-300,
+.text-red-400 {
+  color: var(--color-text-primary) !important;
+}
+
+.ring-blue-500 {
+  --tw-ring-color: var(--color-button-primary) !important;
+}
+
+.hover\:bg-blue-600:hover,
+.hover\:bg-slate-800:hover,
+.hover\:bg-slate-700:hover,
+.hover\:bg-slate-700\/30:hover,
+.hover\:bg-slate-600:hover,
+.hover\:bg-slate-500:hover {
+  background-color: var(--color-button-primary-hover) !important;
+}
+
+.hover\:bg-primary\/90:hover,
+.hover\:bg-primary\/10:hover {
+  background-color: var(--color-button-primary-hover) !important;
+  opacity: 0.9;
+}
+
+.text-primary {
+  color: var(--color-button-primary) !important;
+}
+
+.hover\:text-primary\/80:hover {
+  color: var(--color-button-primary-hover) !important;
+}
+
+.hover\:text-white:hover {
+  color: var(--color-text-primary) !important;
+}
+
+.border-primary {
+  border-color: var(--color-button-primary) !important;
+}
+
+.focus\:border-primary:focus {
+  border-color: var(--color-button-primary) !important;
+}
+
+.focus\:ring-primary:focus,
+.focus\:ring-primary\/50:focus {
+  --tw-ring-color: var(--color-button-primary) !important;
+}
+
+/* Remover outline azul padrão dos inputs */
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none !important;
+  border-color: var(--color-button-primary) !important;
+  --tw-ring-color: var(--color-button-primary) !important;
+}
+
+/* Checkboxes personalizados */
+input[type="checkbox"] {
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--color-border);
+  border-radius: 0.25rem;
+  background-color: var(--color-surface);
+  cursor: pointer;
+  position: relative;
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--color-button-primary);
+  border-color: var(--color-button-primary);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: bold;
+}

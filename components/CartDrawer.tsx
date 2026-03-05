@@ -410,7 +410,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     onClose();
                     window.location.href = '/checkout';
                   }}
-                  className="w-full p-6 bg-primary hover:bg-blue-600 rounded-xl text-white font-semibold flex items-center gap-4 transition-all shadow-lg hover:shadow-primary/30 border border-primary/30"
+                  className="w-full p-6 bg-custom-btn-primary rounded-xl text-white font-semibold flex items-center gap-4 transition-all shadow-lg border border-custom"
                 >
                   <ShoppingBag className="w-8 h-8 flex-shrink-0" />
                   <div className="text-left flex-grow">
@@ -427,7 +427,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   setPurchaseMethod('WHATSAPP');
                   handleWhatsAppCheckout();
                 }}
-                className="w-full p-5 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium flex items-center gap-4 transition-all border border-slate-700"
+                className="w-full p-5 bg-custom-btn-secondary rounded-xl text-white font-medium flex items-center gap-4 transition-all border border-custom"
               >
                 <MessageCircle className="w-7 h-7 flex-shrink-0 text-emerald-400" />
                 <div className="text-left flex-grow">
@@ -480,19 +480,19 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
         {/* Footer Actions */}
         {step !== 'SUCCESS' && cart.length > 0 && (
-          <div className="p-5 border-t border-slate-800 bg-slate-900/90 backdrop-blur-sm">
+          <div className="p-5 border-t border-custom bg-custom-card backdrop-blur-sm">
             
             {/* Resumo da Compra */}
             {step === 'CHECKOUT' && (
-              <div className="space-y-2 mb-4 pb-4 border-b border-slate-700">
+              <div className="space-y-2 mb-4 pb-4 border-b border-custom">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">Subtotal</span>
-                  <span className="text-white">
+                  <span className="text-custom-secondary">Subtotal</span>
+                  <span className="text-custom-primary">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">Frete</span>
+                  <span className="text-custom-secondary">Frete</span>
                   <span className="text-emerald-400 font-semibold">
                     {customer.cep.replace(/\D/g, '').length === 8 ? 'GRÁTIS' : 'Calcular'}
                   </span>
@@ -501,10 +501,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             )}
 
             {freteValor > 0 && (
-              <div className="space-y-2 mb-4 p-3 bg-slate-800 rounded-lg border border-slate-700">
+              <div className="space-y-2 mb-4 p-3 bg-custom-surface rounded-lg border border-custom">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">Subtotal</span>
-                  <span className="text-white">
+                  <span className="text-custom-secondary">Subtotal</span>
+                  <span className="text-custom-primary">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subtotal)}
                   </span>
                 </div>
@@ -527,14 +527,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             {step === 'CART' ? (
               <button
                 onClick={() => setStep('METHOD')}
-                className="w-full bg-primary hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
+                className="w-full bg-custom-btn-primary text-white font-bold py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2"
               >
                 Continuar Compra <ArrowRight className="w-5 h-5" />
               </button>
             ) : step === 'METHOD' ? (
               <button
                 onClick={() => setStep('CART')}
-                className="w-full px-6 py-4 rounded-xl font-bold text-slate-300 border border-slate-700 hover:bg-slate-800 transition-colors"
+                className="w-full px-6 py-4 rounded-xl font-bold text-custom-secondary border border-custom hover:bg-custom-surface transition-colors"
               >
                 Voltar ao Carrinho
               </button>
@@ -543,14 +543,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                  <button
                   type="button"
                   onClick={() => setStep('METHOD')}
-                  className="px-6 py-4 rounded-xl font-bold text-slate-300 border border-slate-700 hover:bg-slate-800 transition-colors"
+                  className="px-6 py-4 rounded-xl font-bold text-custom-secondary border border-custom hover:bg-custom-surface transition-colors"
                 >
                   Voltar
                 </button>
                 <button
                   type="submit"
                   form="checkout-form"
-                  className="flex-grow bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-emerald-900/25 flex items-center justify-center gap-2"
+                  className="flex-grow bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2"
                 >
                   <CheckCircle className="w-5 h-5" /> Confirmar Pedido
                 </button>

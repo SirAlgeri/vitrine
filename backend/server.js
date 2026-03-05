@@ -66,7 +66,10 @@ app.put('/api/config', async (req, res) => {
       store_name, primary_color, secondary_color, whatsapp_number, logo_url, 
       enable_online_checkout, enable_whatsapp_checkout, payment_methods, 
       markup_percentage, cep_origem, enable_pickup, pickup_address,
-      smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, smtp_from_name
+      smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from, smtp_from_name,
+      background_color, card_color, surface_color, text_primary_color, text_secondary_color,
+      border_color, button_primary_color, button_primary_hover_color, 
+      button_secondary_color, button_secondary_hover_color
     } = req.body;
     
     // Construir query dinamicamente baseado nos campos enviados
@@ -159,6 +162,48 @@ app.put('/api/config', async (req, res) => {
     if (smtp_from_name !== undefined) {
       updates.push(`smtp_from_name = $${paramCount++}`);
       values.push(smtp_from_name);
+    }
+    
+    // Campos de cores personalizadas
+    if (background_color !== undefined) {
+      updates.push(`background_color = $${paramCount++}`);
+      values.push(background_color);
+    }
+    if (card_color !== undefined) {
+      updates.push(`card_color = $${paramCount++}`);
+      values.push(card_color);
+    }
+    if (surface_color !== undefined) {
+      updates.push(`surface_color = $${paramCount++}`);
+      values.push(surface_color);
+    }
+    if (text_primary_color !== undefined) {
+      updates.push(`text_primary_color = $${paramCount++}`);
+      values.push(text_primary_color);
+    }
+    if (text_secondary_color !== undefined) {
+      updates.push(`text_secondary_color = $${paramCount++}`);
+      values.push(text_secondary_color);
+    }
+    if (border_color !== undefined) {
+      updates.push(`border_color = $${paramCount++}`);
+      values.push(border_color);
+    }
+    if (button_primary_color !== undefined) {
+      updates.push(`button_primary_color = $${paramCount++}`);
+      values.push(button_primary_color);
+    }
+    if (button_primary_hover_color !== undefined) {
+      updates.push(`button_primary_hover_color = $${paramCount++}`);
+      values.push(button_primary_hover_color);
+    }
+    if (button_secondary_color !== undefined) {
+      updates.push(`button_secondary_color = $${paramCount++}`);
+      values.push(button_secondary_color);
+    }
+    if (button_secondary_hover_color !== undefined) {
+      updates.push(`button_secondary_hover_color = $${paramCount++}`);
+      values.push(button_secondary_hover_color);
     }
     
     if (updates.length === 0) {

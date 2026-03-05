@@ -53,9 +53,32 @@ const AppContent: React.FC = () => {
           markupPercentage: configData.markup_percentage || 0,
           cepOrigem: configData.cep_origem,
           enablePickup: configData.enable_pickup,
-          pickupAddress: configData.pickup_address
+          pickupAddress: configData.pickup_address,
+          background_color: configData.background_color,
+          card_color: configData.card_color,
+          surface_color: configData.surface_color,
+          text_primary_color: configData.text_primary_color,
+          text_secondary_color: configData.text_secondary_color,
+          border_color: configData.border_color,
+          button_primary_color: configData.button_primary_color,
+          button_primary_hover_color: configData.button_primary_hover_color,
+          button_secondary_color: configData.button_secondary_color,
+          button_secondary_hover_color: configData.button_secondary_hover_color
         };
         setConfig(newConfig);
+        
+        // Aplicar cores personalizadas no CSS
+        const root = document.documentElement;
+        if (configData.background_color) root.style.setProperty('--color-background', configData.background_color);
+        if (configData.card_color) root.style.setProperty('--color-card', configData.card_color);
+        if (configData.surface_color) root.style.setProperty('--color-surface', configData.surface_color);
+        if (configData.text_primary_color) root.style.setProperty('--color-text-primary', configData.text_primary_color);
+        if (configData.text_secondary_color) root.style.setProperty('--color-text-secondary', configData.text_secondary_color);
+        if (configData.border_color) root.style.setProperty('--color-border', configData.border_color);
+        if (configData.button_primary_color) root.style.setProperty('--color-button-primary', configData.button_primary_color);
+        if (configData.button_primary_hover_color) root.style.setProperty('--color-button-primary-hover', configData.button_primary_hover_color);
+        if (configData.button_secondary_color) root.style.setProperty('--color-button-secondary', configData.button_secondary_color);
+        if (configData.button_secondary_hover_color) root.style.setProperty('--color-button-secondary-hover', configData.button_secondary_hover_color);
         
         // Atualizar título da página
         document.title = configData.store_name;
@@ -134,7 +157,17 @@ const AppContent: React.FC = () => {
         markup_percentage: newConfig.markupPercentage,
         cep_origem: newConfig.cepOrigem,
         enable_pickup: newConfig.enablePickup,
-        pickup_address: newConfig.pickupAddress
+        pickup_address: newConfig.pickupAddress,
+        background_color: newConfig.background_color,
+        card_color: newConfig.card_color,
+        surface_color: newConfig.surface_color,
+        text_primary_color: newConfig.text_primary_color,
+        text_secondary_color: newConfig.text_secondary_color,
+        border_color: newConfig.border_color,
+        button_primary_color: newConfig.button_primary_color,
+        button_primary_hover_color: newConfig.button_primary_hover_color,
+        button_secondary_color: newConfig.button_secondary_color,
+        button_secondary_hover_color: newConfig.button_secondary_hover_color
       });
       setConfig(newConfig);
     } catch (err) {

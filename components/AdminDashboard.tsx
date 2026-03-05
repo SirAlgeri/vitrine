@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Product, AppConfig } from '../types';
 import { Plus, Edit2, Trash2, Settings, Palette, Save, Tag, CreditCard, BarChart3, Mail } from 'lucide-react';
 import { formatPhone } from '../services/validators';
@@ -34,11 +34,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showSuccess, setShowSuccess] = useState(false);
   const logoInputRef = React.useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setTempConfig(config);
+  }, [config]);
+
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleSaveConfig = () => {
+    // Validação dos campos obrigatórios
+    if (!tempConfig.storeName?.trim()) {
+      alert('Nome da loja é obrigatório');
+      return;
+    }
+    if (!tempConfig.whatsappNumber?.trim()) {
+      alert('Número do WhatsApp é obrigatório');
+      return;
+    }
+    if (!tempConfig.cepOrigem?.trim() || tempConfig.cepOrigem.replace(/\D/g, '').length !== 8) {
+      alert('CEP de origem é obrigatório e deve ter 8 dígitos');
+      return;
+    }
+    
     onUpdateConfig(tempConfig);
     setShowConfig(false);
     setShowSuccess(true);
