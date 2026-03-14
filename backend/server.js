@@ -50,7 +50,7 @@ app.use(cors({
     // Verificar se a origin está na lista ou é um subdomínio permitido
     const isAllowed = allowedOrigins.some(allowed => {
       if (allowed.includes('*')) {
-        const pattern = allowed.replace('*.', '');
+        const pattern = allowed.replace('https://*.', '.').replace('http://*.', '.');
         return origin.includes(pattern);
       }
       return origin === allowed;
