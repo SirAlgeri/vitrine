@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Product, FieldDefinition } from '../types';
-import { StorageService } from '../services/storageService';
+import { api } from '../services/api';
 import { Camera, Image as ImageIcon, X, ChevronLeft, Save, UploadCloud } from 'lucide-react';
 
 interface ProductFormProps {
@@ -49,20 +49,17 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
 
     setIsProcessingImg(true);
     try {
-      const newImages = [];
-      for (let i = 0; i < Math.min(files.length, 10 - currentImages.length); i++) {
-        const base64 = await StorageService.compressImage(files[i]);
-        newImages.push(base64);
-      }
+      const filesToUpload = Array.from(files).slice(0, 10 - currentImages.length);
+      const urls = await api.uploadImages(filesToUpload);
       
-      const allImages = [...currentImages, ...newImages];
+      const allImages = [...currentImages, ...urls];
       setFormData(prev => ({ 
         ...prev, 
         images: allImages,
-        image: allImages[0] || '' // Primeira imagem como principal
+        image: allImages[0] || ''
       }));
     } catch (error) {
-      alert('Erro ao processar imagem. Tente uma foto menor.');
+      alert('Erro ao fazer upload da imagem. Tente novamente.');
     } finally {
       setIsProcessingImg(false);
     }

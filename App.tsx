@@ -27,14 +27,16 @@ const AppContent: React.FC = () => {
   });
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
 
   // Initial Load
   useEffect(() => {
     loadConfig();
     setCart(StorageService.getCart());
     
-    const session = sessionStorage.getItem('vitrine_session');
-    if (session === 'true') setIsAuthenticated(true);
+    // Verificar se tem token válido
+    const token = localStorage.getItem('admin_token');
+    if (token) setIsAuthenticated(true);
     
     const savedCustomer = customerAuth.getSession();
     if (savedCustomer) setCustomer(savedCustomer);
@@ -93,8 +95,27 @@ const AppContent: React.FC = () => {
       }
     } catch (err) {
       console.error('Erro ao carregar configuração');
+    } finally {
+      // Delay de 1 segundo antes de mostrar o conteúdo
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsConfigLoaded(true);
     }
   };
+  
+  // Tela invisível enquanto carrega
+  if (!isConfigLoaded) {
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'transparent',
+        zIndex: 9999
+      }} />
+    );
+  }
 
   // Cart Actions
   const handleAddToCart = (product: Product) => {
@@ -139,8 +160,8 @@ const AppContent: React.FC = () => {
   };
 
   const handleLogout = () => {
+    api.logout();
     setIsAuthenticated(false);
-    sessionStorage.removeItem('vitrine_session');
     customerAuth.clearSession();
     setCustomer(null);
     navigate('/');

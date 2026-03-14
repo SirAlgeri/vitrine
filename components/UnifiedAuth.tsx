@@ -35,7 +35,6 @@ export const UnifiedAuth: React.FC<UnifiedAuthProps> = ({ onBack, onCustomerSucc
     try {
       try {
         await api.login(loginData.email, loginData.senha);
-        sessionStorage.setItem('vitrine_session', 'true');
         onAdminSuccess();
         return;
       } catch (adminErr) {

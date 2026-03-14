@@ -14,9 +14,14 @@ import {
   updateOrderStatus,
   updateOrderStatusManual 
 } from './statusManager.js';
-// SMTP Email Service (substitui AWS SES)
 import { sendOrderStatusEmail, sendVerificationEmail } from './smtpEmailService.js';
 import { tenantMiddleware } from './middleware/tenant.js';
+import { authenticateAdmin, generateToken } from './middleware/auth.js';
+import rateLimit from 'express-rate-limit';
+import { body, validationResult } from 'express-validator';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+import { uploadMiddleware, uploadToS3, deleteFromS3 } from './s3Upload.js';
 
 dotenv.config();
 
@@ -27,8 +32,61 @@ const mercadopago = new MercadoPagoConfig({
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: false, // Desabilitar CSP para não quebrar o frontend
+  crossOriginEmbedderPolicy: false
+}));
+
+app.use(cookieParser());
+
+// CORS configurado
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permitir requisições sem origin (mobile apps, Postman, etc)
+    if (!origin) return callback(null, true);
+    
+    // Verificar se a origin está na lista ou é um subdomínio permitido
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed.includes('*')) {
+        const pattern = allowed.replace('*.', '');
+        return origin.includes(pattern);
+      }
+      return origin === allowed;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json({ limit: '50mb' }));
+
+// Rate limiters
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 5,
+  message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minuto
+  max: 100,
+  message: { error: 'Muitas requisições. Tente novamente em 1 minuto.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Aplicar rate limiter geral
+app.use('/api/', apiLimiter);
+
 // Tenant middleware
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/admin/tenants')) {
@@ -45,7 +103,24 @@ app.get('/api/health', (req, res) => {
 app.get('/api/config', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id]);
-    res.json(result.rows[0] || {});
+    const config = result.rows[0] || {};
+    
+    // Remover dados sensíveis/internos
+    delete config.id;
+    delete config.tenant_id;
+    delete config.created_at;
+    delete config.updated_at;
+    delete config.markup_percentage;
+    delete config.cep_origem;
+    delete config.smtp_host;
+    delete config.smtp_port;
+    delete config.smtp_user;
+    delete config.smtp_pass;
+    delete config.smtp_from;
+    delete config.smtp_from_name;
+    delete config.smtp_secure;
+    
+    res.json(config);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -60,8 +135,20 @@ app.get('/api/tenant/current', async (req, res) => {
   }
 });
 
-app.put('/api/config', async (req, res) => {
+app.put('/api/config', authenticateAdmin, [
+  body('store_name').optional().trim().isLength({ min: 1, max: 100 }),
+  body('whatsapp_number').optional().matches(/^\d{10,15}$/),
+  body('primary_color').optional().matches(/^#[0-9A-Fa-f]{6}$/),
+  body('secondary_color').optional().matches(/^#[0-9A-Fa-f]{6}$/),
+  body('markup_percentage').optional().isFloat({ min: 0, max: 100 }),
+  body('cep_origem').optional().matches(/^\d{8}$/)
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     const { 
       store_name, primary_color, secondary_color, whatsapp_number, logo_url, 
       enable_online_checkout, enable_whatsapp_checkout, payment_methods, 
@@ -254,18 +341,25 @@ app.post('/api/frete/calcular', async (req, res) => {
 });
 
 // ========== AUTH ==========
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimiter, [
+  body('username').trim().isLength({ min: 1, max: 50 }),
+  body('password').isLength({ min: 1 })
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dados inválidos' });
+    }
+
     const { username, password } = req.body;
     
-    // Buscar usuário do tenant atual
     const result = await pool.query(
       'SELECT * FROM users WHERE username = $1 AND tenant_id = $2', 
       [username, req.tenant.id]
     );
     
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Credenciais inválidas para este tenant' });
+      return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
     const user = result.rows[0];
@@ -275,9 +369,17 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciais inválidas' });
     }
 
-    res.json({ success: true, username: user.username, tenant_id: user.tenant_id });
+    const token = generateToken(user);
+
+    res.json({ 
+      success: true, 
+      token,
+      username: user.username, 
+      tenant_id: user.tenant_id 
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro no login:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
@@ -633,6 +735,11 @@ app.get('/api/products', async (req, res) => {
         [product.id, req.tenant.id]
       );
       product.images = imagesResult.rows.map(row => row.image);
+      
+      // Remover dados sensíveis/desnecessários
+      delete product.created_at;
+      delete product.updated_at;
+      delete product.tenant_id;
     }
     
     res.json(products);
@@ -669,6 +776,11 @@ app.get('/api/products/:id', async (req, res) => {
     );
     product.images = imagesResult.rows.map(row => row.image);
     
+    // Remover dados sensíveis/desnecessários
+    delete product.created_at;
+    delete product.updated_at;
+    delete product.tenant_id;
+    
     res.json(product);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -677,9 +789,34 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
-app.post('/api/products', async (req, res) => {
+// Upload de imagens para S3
+app.post('/api/upload-images', authenticateAdmin, uploadMiddleware, async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'Nenhuma imagem enviada' });
+    }
+    const urls = await Promise.all(
+      req.files.map(file => uploadToS3(file.buffer, file.mimetype))
+    );
+    res.json({ urls });
+  } catch (err) {
+    console.error('Erro no upload:', err);
+    res.status(500).json({ error: 'Erro ao fazer upload das imagens' });
+  }
+});
+
+app.post('/api/products', authenticateAdmin, [
+  body('name').trim().isLength({ min: 1, max: 200 }),
+  body('price').isFloat({ min: 0 }),
+  body('stock_quantity').optional().isInt({ min: 0 })
+], async (req, res) => {
   const client = await pool.connect();
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     await client.query('BEGIN');
     
     const { id, name, price, description, image, images, stock_quantity, fields } = req.body;
@@ -714,15 +851,25 @@ app.post('/api/products', async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao criar produto:', err);
+    res.status(500).json({ error: 'Erro ao criar produto' });
   } finally {
     client.release();
   }
 });
 
-app.put('/api/products/:id', async (req, res) => {
+app.put('/api/products/:id', authenticateAdmin, [
+  body('name').trim().isLength({ min: 1, max: 200 }),
+  body('price').isFloat({ min: 0 }),
+  body('stock_quantity').optional().isInt({ min: 0 })
+], async (req, res) => {
   const client = await pool.connect();
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
     await client.query('BEGIN');
     
     const { name, price, description, image, images, stock_quantity, fields } = req.body;
@@ -738,6 +885,16 @@ app.put('/api/products/:id', async (req, res) => {
     
     // Update multiple images
     if (images && Array.isArray(images)) {
+      // Deletar imagens antigas do S3 que foram removidas
+      const oldImgs = await client.query(
+        'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2',
+        [req.params.id, req.tenant.id]
+      );
+      const newSet = new Set(images);
+      oldImgs.rows
+        .filter(r => r.image && r.image.startsWith('http') && !newSet.has(r.image))
+        .forEach(r => deleteFromS3(r.image));
+
       await client.query('DELETE FROM product_images WHERE product_id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
       for (let i = 0; i < Math.min(images.length, 10); i++) {
         await client.query(
@@ -766,21 +923,41 @@ app.put('/api/products/:id', async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao atualizar produto:', err);
+    res.status(500).json({ error: 'Erro ao atualizar produto' });
   } finally {
     client.release();
   }
 });
 
-app.delete('/api/products/:id', async (req, res) => {
+app.delete('/api/products/:id', authenticateAdmin, async (req, res) => {
   try {
+    // Buscar imagens do S3 para deletar
+    const imgs = await pool.query(
+      'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2',
+      [req.params.id, req.tenant.id]
+    );
+    const mainImg = await pool.query(
+      'SELECT image FROM products WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, req.tenant.id]
+    );
+
     const result = await pool.query('DELETE FROM products WHERE id = $1 AND tenant_id = $2 RETURNING *', [req.params.id, req.tenant.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
+
+    // Deletar imagens do S3 em background
+    const allUrls = [
+      ...imgs.rows.map(r => r.image),
+      mainImg.rows[0]?.image
+    ].filter(url => url && url.startsWith('http'));
+    allUrls.forEach(url => deleteFromS3(url));
+
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao deletar produto:', err);
+    res.status(500).json({ error: 'Erro ao deletar produto' });
   }
 });
 
@@ -799,7 +976,7 @@ app.get('/api/field-definitions', async (req, res) => {
   }
 });
 
-app.post('/api/field-definitions', async (req, res) => {
+app.post('/api/field-definitions', authenticateAdmin, async (req, res) => {
   try {
     const { id, field_name, field_type, field_order, options } = req.body;
     const result = await pool.query(
@@ -810,11 +987,12 @@ app.post('/api/field-definitions', async (req, res) => {
     field.options = field.options ? JSON.parse(field.options) : null;
     res.status(201).json(field);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao criar campo:', err);
+    res.status(500).json({ error: 'Erro ao criar campo' });
   }
 });
 
-app.put('/api/field-definitions/:id', async (req, res) => {
+app.put('/api/field-definitions/:id', authenticateAdmin, async (req, res) => {
   try {
     const { field_name, field_type } = req.body;
     const result = await pool.query(
@@ -826,11 +1004,12 @@ app.put('/api/field-definitions/:id', async (req, res) => {
     }
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao atualizar campo:', err);
+    res.status(500).json({ error: 'Erro ao atualizar campo' });
   }
 });
 
-app.delete('/api/field-definitions/:id', async (req, res) => {
+app.delete('/api/field-definitions/:id', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query(
       'DELETE FROM field_definitions WHERE id = $1 AND can_delete = true AND tenant_id = $2 RETURNING *',
@@ -841,7 +1020,8 @@ app.delete('/api/field-definitions/:id', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao deletar campo:', err);
+    res.status(500).json({ error: 'Erro ao deletar campo' });
   }
 });
 
@@ -852,6 +1032,20 @@ app.post('/api/orders', async (req, res) => {
     await client.query('BEGIN');
     
     const { customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_provider_status, payment_status: customPaymentStatus, order_status: customOrderStatus, total, items, created_at } = req.body;
+    
+    // Buscar markup da config
+    const configResult = await client.query(
+      'SELECT markup_percentage FROM config WHERE tenant_id = $1 LIMIT 1',
+      [req.tenant.id]
+    );
+    const markup = configResult.rows[0]?.markup_percentage || 0;
+    
+    // Função para aplicar markup
+    const applyMarkup = (basePrice, markupPercentage) => {
+      const price = Number(basePrice) || 0;
+      const markupPct = Number(markupPercentage) || 0;
+      return Number((price / (1 - markupPct / 100)).toFixed(2));
+    };
     
     // Se vier com status customizado (registro manual), usar ele. Senão, mapear do gateway
     let payment_status, order_status;
@@ -865,26 +1059,58 @@ app.post('/api/orders', async (req, res) => {
       order_status = payment_status === PaymentStatus.APPROVED ? OrderStatus.PAID : OrderStatus.PENDING_PAYMENT;
     }
     
+    // Recalcular total no backend
+    let calculatedTotal = 0;
+    const validatedItems = [];
+    
+    for (const item of items) {
+      // Buscar preço real do produto no banco
+      const productResult = await client.query(
+        'SELECT price, name, image FROM products WHERE id = $1 AND tenant_id = $2',
+        [item.product_id || item.id, req.tenant.id]
+      );
+      
+      if (productResult.rows.length === 0) {
+        throw new Error(`Produto ${item.product_id || item.id} não encontrado`);
+      }
+      
+      const product = productResult.rows[0];
+      const basePrice = Number(product.price);
+      const finalPrice = applyMarkup(basePrice, markup);
+      const subtotal = finalPrice * item.quantity;
+      
+      calculatedTotal += subtotal;
+      
+      validatedItems.push({
+        product_id: item.product_id || item.id,
+        product_name: product.name,
+        product_price: finalPrice,
+        product_image: product.image,
+        quantity: item.quantity,
+        subtotal: subtotal
+      });
+    }
+    
     const orderResult = await client.query(
       `INSERT INTO orders 
        (customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at, tenant_id) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-      [customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, total, created_at || new Date(), req.tenant.id]
+      [customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_status, order_status, payment_provider_status, calculatedTotal, created_at || new Date(), req.tenant.id]
     );
     
     const order = orderResult.rows[0];
     
-    for (const item of items) {
+    for (const item of validatedItems) {
       await client.query(
         'INSERT INTO order_items (order_id, product_id, product_name, product_price, product_image, quantity, subtotal, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [order.id, item.product_id || item.id, item.product_name || item.name, item.product_price || item.price, item.product_image || item.image, item.quantity, item.subtotal || (item.price * item.quantity), req.tenant.id]
+        [order.id, item.product_id, item.product_name, item.product_price, item.product_image, item.quantity, item.subtotal, req.tenant.id]
       );
       
       // Deduzir do estoque se pagamento aprovado
       if (payment_status === PaymentStatus.APPROVED) {
         await client.query(
           'UPDATE products SET stock_quantity = GREATEST(stock_quantity - $1, 0) WHERE id = $2 AND tenant_id = $3',
-          [item.quantity, item.product_id || item.id, req.tenant.id]
+          [item.quantity, item.product_id, req.tenant.id]
         );
       }
     }
@@ -1059,7 +1285,7 @@ app.post('/api/mercadopago/create-boleto', async (req, res) => {
 // ========== STATUS MANAGEMENT ==========
 
 // Atualizar status do pedido (admin)
-app.put('/api/orders/:id/status', async (req, res) => {
+app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
   console.log('🔄 Recebendo requisição para atualizar status');
   console.log('Order ID:', req.params.id);
   console.log('Body:', req.body);
@@ -1096,7 +1322,7 @@ app.put('/api/orders/:id/status', async (req, res) => {
     console.log('🔄 Atualizando status...');
     
     // Atualizar status
-    const result = await updateOrderStatusManual(pool, req.params.id, order_status, 'admin', notes, req.tenant.id);
+    const result = await updateOrderStatusManual(pool, req.params.id, order_status, req.user.username, notes, req.tenant.id);
     
     console.log('✅ Status atualizado:', result);
     

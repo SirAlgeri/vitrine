@@ -27,6 +27,12 @@ body {
   color: var(--color-text-primary) !important;
 }
 
+/* Animação de loading */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 /* Sobrescrever cores do Tailwind com variáveis customizáveis */
 .bg-slate-900, 
 .bg-slate-900\/80, 
