@@ -34,7 +34,8 @@ export async function uploadToS3(fileBuffer, mimetype) {
     Bucket: BUCKET,
     Key: key,
     Body: fileBuffer,
-    ContentType: mimetype
+    ContentType: mimetype,
+    CacheControl: 'public, max-age=2592000, immutable'
   }));
   return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 }

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ProductCard } from '../components/ProductCard';
 import { ProductModal } from '../components/ProductModal';
-import { api } from '../services/api';
+import { useInfiniteProducts } from '../hooks/useInfiniteProducts';
 import { Product, AppConfig, FieldDefinition } from '../types';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
 
 interface HomeProps {
   config: AppConfig;
@@ -12,38 +12,53 @@ interface HomeProps {
 }
 
 export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
-  const [products, setProducts] = useState<Product[]>([]);
   const [fields, setFields] = useState<FieldDefinition[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [catalogSearch, setCatalogSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [priceRange, setPriceRange] = useState({ min: '', max: '' });
   const [selectedFilters, setSelectedFilters] = useState<{ [fieldId: string]: string[] }>({});
   const navigate = useNavigate();
 
+  // Debounce da busca para não disparar request a cada tecla
   useEffect(() => {
-    loadProducts();
+    const timer = setTimeout(() => setDebouncedSearch(catalogSearch), 300);
+    return () => clearTimeout(timer);
+  }, [catalogSearch]);
+
+  const { products, loading, hasMore, total, loadMore } = useInfiniteProducts(debouncedSearch);
+
+  // IntersectionObserver: dispara loadMore quando o sentinel entra na viewport
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading) {
+          loadMore();
+        }
+      },
+      { rootMargin: '200px' } // Começa a carregar 200px antes de chegar ao fim
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadMore]);
+
+  useEffect(() => {
     loadFields();
   }, []);
-
-  const loadProducts = async () => {
-    try {
-      const data = await api.getProducts();
-      setProducts(data);
-    } catch (err) {
-      console.error('Erro ao carregar produtos');
-    }
-  };
 
   const loadFields = async () => {
     try {
       const res = await fetch('/api/field-definitions');
       const data = await res.json();
-      // Garantir que data é um array antes de filtrar
       if (Array.isArray(data)) {
         setFields(data.filter((f: FieldDefinition) => f.field_type === 'select'));
       } else {
-        console.error('Resposta inválida de field-definitions:', data);
         setFields([]);
       }
     } catch (err) {
@@ -67,17 +82,11 @@ export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
     setSelectedFilters({});
   };
 
-  const filtered = products.filter(p => {
-    // Filtro de busca
-    if (catalogSearch && !p.name.toLowerCase().includes(catalogSearch.toLowerCase())) {
-      return false;
-    }
-
-    // Filtro de preço
+  // Filtros locais (preço e campos select) aplicados sobre os produtos já carregados
+  const filtered = (products || []).filter(p => {
     if (priceRange.min && p.price < parseFloat(priceRange.min)) return false;
     if (priceRange.max && p.price > parseFloat(priceRange.max)) return false;
 
-    // Filtros de campos select
     for (const fieldId in selectedFilters) {
       if (selectedFilters[fieldId].length > 0) {
         const productValue = p.fields?.[fieldId];
@@ -208,13 +217,22 @@ export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
               />
             ))}
           </div>
-        ) : (
+        ) : !loading ? (
           <div className="text-center py-20">
             <div className="inline-block p-4 rounded-full bg-slate-800 mb-4 text-slate-500">
               <Search className="w-8 h-8" />
             </div>
             <h3 className="text-xl font-medium text-white mb-2">Nada encontrado</h3>
             <p className="text-slate-400">Tente buscar por outro termo.</p>
+          </div>
+        ) : null}
+
+        {/* Sentinel: quando visível, dispara carregamento da próxima página */}
+        <div ref={sentinelRef} className="h-1" />
+
+        {loading && (
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         )}
       </div>

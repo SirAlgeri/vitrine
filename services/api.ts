@@ -52,7 +52,16 @@ export const api = {
 
   // Products
   getProducts: async () => {
-    const res = await fetch(`${API_URL}/products`);
+    // Admin: carrega todos os produtos
+    const res = await fetch(`${API_URL}/products?all=true`);
+    return res.json();
+  },
+
+  // Catálogo: carrega paginado
+  getProductsPage: async (page = 1, limit = 24, search = '') => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search) params.set('search', search);
+    const res = await fetch(`${API_URL}/products?${params}`);
     return res.json();
   },
 

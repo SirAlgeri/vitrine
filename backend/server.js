@@ -712,37 +712,110 @@ app.delete('/api/addresses/:id', async (req, res) => {
 });
 
 // ========== PRODUCTS ==========
+// Produtos paginados para o catálogo (infinite scroll)
+// - Carrega apenas N produtos por vez, reduzindo queries ao banco e requests de imagens ao S3
+// - Usa OFFSET/LIMIT com contagem total para saber se há próxima página
+// - Campos e imagens são carregados via JOINs em batch ao invés de N+1 queries
 app.get('/api/products', async (req, res) => {
   const client = await pool.connect();
   try {
-    const productsResult = await client.query('SELECT * FROM products WHERE tenant_id = $1 ORDER BY created_at DESC', [req.tenant.id]);
-    const products = productsResult.rows;
-    
-    // Load custom fields and images for each product
-    for (const product of products) {
-      const fieldsResult = await client.query(
-        'SELECT field_id, value FROM product_fields WHERE product_id = $1 AND tenant_id = $2',
-        [product.id, req.tenant.id]
+    const limit = Math.min(parseInt(req.query.limit) || 24, 100);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const offset = (page - 1) * limit;
+    const search = req.query.search || '';
+    const all = req.query.all === 'true'; // Flag para admin carregar tudo
+
+    // Condição de busca
+    const searchCondition = search ? ' AND LOWER(p.name) LIKE $3' : '';
+    const searchParam = search ? [`%${search.toLowerCase()}%`] : [];
+
+    if (all) {
+      // Admin: carrega todos (comportamento original)
+      const productsResult = await client.query(
+        'SELECT * FROM products WHERE tenant_id = $1 ORDER BY created_at DESC',
+        [req.tenant.id]
       );
-      product.fields = {};
-      fieldsResult.rows.forEach(row => {
-        product.fields[row.field_id] = row.value;
-      });
-      
-      // Load images
-      const imagesResult = await client.query(
-        'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
-        [product.id, req.tenant.id]
-      );
-      product.images = imagesResult.rows.map(row => row.image);
-      
-      // Remover dados sensíveis/desnecessários
-      delete product.created_at;
-      delete product.updated_at;
-      delete product.tenant_id;
+      const products = productsResult.rows;
+
+      for (const product of products) {
+        const fieldsResult = await client.query(
+          'SELECT field_id, value FROM product_fields WHERE product_id = $1 AND tenant_id = $2',
+          [product.id, req.tenant.id]
+        );
+        product.fields = {};
+        fieldsResult.rows.forEach(row => { product.fields[row.field_id] = row.value; });
+
+        const imagesResult = await client.query(
+          'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
+          [product.id, req.tenant.id]
+        );
+        product.images = imagesResult.rows.map(row => row.image);
+
+        delete product.created_at;
+        delete product.updated_at;
+        delete product.tenant_id;
+      }
+
+      return res.json(products);
     }
-    
-    res.json(products);
+
+    // Catálogo: paginado
+    const countQuery = `SELECT COUNT(*) FROM products p WHERE p.tenant_id = $1${searchCondition}`;
+    const countParams = [req.tenant.id, ...searchParam];
+    const countResult = await client.query(countQuery, countParams);
+    const totalCount = parseInt(countResult.rows[0].count);
+
+    const productsQuery = `
+      SELECT p.id, p.name, p.price, p.description, p.image, p.stock_quantity
+      FROM products p
+      WHERE p.tenant_id = $1${searchCondition}
+      ORDER BY p.updated_at DESC
+      LIMIT $2 OFFSET ${searchCondition ? '$4' : '$3'}
+    `;
+    const productsParams = [req.tenant.id, limit, ...(search ? [searchParam[0], offset] : [offset])];
+    const productsResult = await client.query(productsQuery, productsParams);
+    const products = productsResult.rows;
+
+    if (products.length > 0) {
+      const productIds = products.map(p => p.id);
+
+      // Batch: campos customizados
+      const fieldsResult = await client.query(
+        `SELECT product_id, field_id, value FROM product_fields 
+         WHERE product_id = ANY($1) AND tenant_id = $2`,
+        [productIds, req.tenant.id]
+      );
+      const fieldsMap = {};
+      fieldsResult.rows.forEach(row => {
+        if (!fieldsMap[row.product_id]) fieldsMap[row.product_id] = {};
+        fieldsMap[row.product_id][row.field_id] = row.value;
+      });
+
+      // Batch: imagens
+      const imagesResult = await client.query(
+        `SELECT product_id, image FROM product_images 
+         WHERE product_id = ANY($1) AND tenant_id = $2 ORDER BY image_order`,
+        [productIds, req.tenant.id]
+      );
+      const imagesMap = {};
+      imagesResult.rows.forEach(row => {
+        if (!imagesMap[row.product_id]) imagesMap[row.product_id] = [];
+        imagesMap[row.product_id].push(row.image);
+      });
+
+      products.forEach(product => {
+        product.fields = fieldsMap[product.id] || {};
+        product.images = imagesMap[product.id] || [];
+        delete product.tenant_id;
+      });
+    }
+
+    const hasMore = offset + products.length < totalCount;
+    res.json({
+      products,
+      nextPage: hasMore ? page + 1 : null,
+      total: totalCount
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {
