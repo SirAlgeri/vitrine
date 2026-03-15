@@ -6,6 +6,16 @@ interface PaymentSettingsProps {
   onBack: () => void;
 }
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('admin_token');
+  return token ? {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  } : {
+    'Content-Type': 'application/json'
+  };
+};
+
 export const PaymentSettings: React.FC<PaymentSettingsProps> = ({ onBack }) => {
   const [config, setConfig] = useState({
     enable_online_checkout: true,
@@ -15,6 +25,7 @@ export const PaymentSettings: React.FC<PaymentSettingsProps> = ({ onBack }) => {
   });
   const [saving, setSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadConfig();
@@ -35,14 +46,30 @@ export const PaymentSettings: React.FC<PaymentSettingsProps> = ({ onBack }) => {
     }
   };
 
+  const handleToggleCheckout = (field: 'enable_online_checkout' | 'enable_whatsapp_checkout', value: boolean) => {
+    const other = field === 'enable_online_checkout' ? config.enable_whatsapp_checkout : config.enable_online_checkout;
+    if (!value && !other) {
+      setError('Pelo menos um método de checkout deve estar ativo');
+      return;
+    }
+    setError('');
+    setConfig({ ...config, [field]: value });
+  };
+
   const handleSave = async () => {
+    if (!config.enable_online_checkout && !config.enable_whatsapp_checkout) {
+      setError('Pelo menos um método de checkout deve estar ativo');
+      return;
+    }
     setSaving(true);
+    setError('');
     try {
-      await fetch('/api/config', {
+      const res = await fetch('/api/config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(config)
       });
+      if (!res.ok) throw new Error('Erro ao salvar');
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
     } catch (err) {
@@ -96,7 +123,7 @@ export const PaymentSettings: React.FC<PaymentSettingsProps> = ({ onBack }) => {
                 <input
                   type="checkbox"
                   checked={config.enable_online_checkout}
-                  onChange={(e) => setConfig({ ...config, enable_online_checkout: e.target.checked })}
+                  onChange={(e) => handleToggleCheckout('enable_online_checkout', e.target.checked)}
                   className="w-5 h-5"
                 />
               </label>
@@ -109,10 +136,14 @@ export const PaymentSettings: React.FC<PaymentSettingsProps> = ({ onBack }) => {
                 <input
                   type="checkbox"
                   checked={config.enable_whatsapp_checkout}
-                  onChange={(e) => setConfig({ ...config, enable_whatsapp_checkout: e.target.checked })}
+                  onChange={(e) => handleToggleCheckout('enable_whatsapp_checkout', e.target.checked)}
                   className="w-5 h-5"
                 />
               </label>
+
+              {error && (
+                <p className="text-red-400 text-sm">{error}</p>
+              )}
 
               {config.enable_whatsapp_checkout && (
                 <div className="ml-4 p-4 bg-slate-700/50 rounded-lg">

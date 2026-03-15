@@ -51,6 +51,8 @@ export interface AppConfig {
   logo_url?: string;
   markupPercentage?: number;
   cepOrigem?: string;
+  enableOnlineCheckout?: boolean;
+  enableWhatsappCheckout?: boolean;
   enablePickup?: boolean;
   pickupAddress?: string;
   background_color?: string;

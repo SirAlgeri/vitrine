@@ -54,6 +54,8 @@ const AppContent: React.FC = () => {
           logo_url: configData.logo_url,
           markupPercentage: configData.markup_percentage || 0,
           cepOrigem: configData.cep_origem,
+          enableOnlineCheckout: configData.enable_online_checkout ?? true,
+          enableWhatsappCheckout: configData.enable_whatsapp_checkout ?? true,
           enablePickup: configData.enable_pickup,
           pickupAddress: configData.pickup_address,
           background_color: configData.background_color,

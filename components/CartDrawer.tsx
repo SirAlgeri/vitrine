@@ -395,6 +395,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <p className="text-slate-400 text-center mb-6">Como você deseja finalizar sua compra?</p>
               
               {/* Online - Recomendado */}
+              {config.enableOnlineCheckout !== false && (
               <div className="relative">
                 <div className="absolute -top-3 right-4 z-10">
                   <span className="bg-green-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg">
@@ -420,8 +421,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   <ArrowRight className="w-5 h-5 flex-shrink-0" />
                 </button>
               </div>
+              )}
 
               {/* WhatsApp */}
+              {config.enableWhatsappCheckout !== false && (
               <button
                 onClick={() => {
                   setPurchaseMethod('WHATSAPP');
@@ -436,6 +439,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
                 <ArrowRight className="w-5 h-5 flex-shrink-0" />
               </button>
+              )}
             </div>
           )}
 
@@ -526,7 +530,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             
             {step === 'CART' ? (
               <button
-                onClick={() => setStep('METHOD')}
+                onClick={() => {
+                  const onlineEnabled = config.enableOnlineCheckout !== false;
+                  const whatsappEnabled = config.enableWhatsappCheckout !== false;
+                  
+                  // Se só online, vai direto pro checkout
+                  if (onlineEnabled && !whatsappEnabled) {
+                    if (freteSelecionado) {
+                      localStorage.setItem('checkout_shipping', JSON.stringify(freteSelecionado));
+                    }
+                    onClose();
+                    window.location.href = '/checkout';
+                    return;
+                  }
+                  // Se só whatsapp, vai direto
+                  if (whatsappEnabled && !onlineEnabled) {
+                    setPurchaseMethod('WHATSAPP');
+                    handleWhatsAppCheckout();
+                    return;
+                  }
+                  // Se ambos, mostra seleção
+                  setStep('METHOD');
+                }}
                 className="w-full bg-custom-btn-primary text-white font-bold py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2"
               >
                 Continuar Compra <ArrowRight className="w-5 h-5" />
