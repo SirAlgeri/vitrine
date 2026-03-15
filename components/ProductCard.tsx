@@ -64,16 +64,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
         )}
       </div>
 
-      <div className="p-4 flex flex-col flex-grow">
+      <div className="p-2 sm:p-4 flex flex-col flex-grow">
         <h3 
-          className="font-semibold text-slate-100 text-lg mb-1 line-clamp-1 group-hover:text-primary transition-colors cursor-pointer"
+          className="font-semibold text-slate-100 text-sm sm:text-lg mb-1 line-clamp-1 group-hover:text-primary transition-colors cursor-pointer"
           onClick={() => onClick(product)}
         >
           {product.name}
         </h3>
         
         <div className="flex items-center justify-between mt-auto pt-3">
-          <span className="text-xl font-bold text-white tracking-tight">
+          <span className="text-base sm:text-xl font-bold text-white tracking-tight">
             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(finalPrice)}
           </span>
           
@@ -83,14 +83,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
               if (!outOfStock) onAddToCart(product);
             }}
             disabled={outOfStock}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg ${
+            className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all shadow-lg ${
               outOfStock 
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
                 : 'bg-slate-700 hover:bg-primary text-slate-300 hover:text-white active:scale-95'
             }`}
             title={outOfStock ? 'Fora de Estoque' : 'Adicionar ao Carrinho'}
           >
-            <ShoppingCart className="w-5 h-5" />
+            <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
       </div>
