@@ -111,7 +111,6 @@ app.get('/api/config', async (req, res) => {
     delete config.created_at;
     delete config.updated_at;
     delete config.markup_percentage;
-    delete config.cep_origem;
     delete config.smtp_host;
     delete config.smtp_port;
     delete config.smtp_user;
