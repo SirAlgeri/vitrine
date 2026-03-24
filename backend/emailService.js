@@ -168,17 +168,17 @@ export async function sendEmail(to, subject, htmlBody) {
   try {
     const command = new SendEmailCommand(params);
     const response = await sesClient.send(command);
-    console.log('✅ Email enviado:', response.MessageId);
+    console.log('Email enviado:', response.MessageId);
     return { success: true, messageId: response.MessageId };
   } catch (error) {
-    console.error('❌ Erro ao enviar email:', error);
+    console.error('Erro ao enviar email:', error);
     return { success: false, error: error.message };
   }
 }
 
 export async function sendOrderStatusEmail(order, newStatus, config = {}) {
   if (!order.customer_email) {
-    console.warn('⚠️ Pedido sem email do cliente:', order.id);
+    console.warn('Pedido sem email do cliente:', order.id);
     return { success: false, error: 'No customer email' };
   }
 

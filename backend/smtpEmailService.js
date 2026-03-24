@@ -182,17 +182,17 @@ export async function sendEmail(to, subject, htmlBody, config = {}) {
       html: htmlBody,
     });
 
-    console.log('✅ Email enviado:', info.messageId);
+    console.log('Email enviado:', info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('❌ Erro ao enviar email:', error);
+    console.error('Erro ao enviar email:', error);
     return { success: false, error: error.message };
   }
 }
 
 export async function sendOrderStatusEmail(order, newStatus, config = {}) {
   if (!order.customer_email) {
-    console.warn('⚠️ Pedido sem email do cliente:', order.id);
+    console.warn('Pedido sem email do cliente:', order.id);
     return { success: false, error: 'No customer email' };
   }
 

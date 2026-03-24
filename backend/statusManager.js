@@ -49,15 +49,18 @@ export function mapMercadoPagoStatus(mpStatus) {
 
 // ========== ATUALIZAR STATUS DO PEDIDO ==========
 
-export async function updateOrderStatus(pool, orderId, paymentProviderStatus, changedBy = 'system', notes = null) {
+export async function updateOrderStatus(pool, orderId, paymentProviderStatus, changedBy = 'system', notes = null, tenantId = null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
     // Buscar status atual
+    const whereClause = tenantId ? 'WHERE id = $1 AND tenant_id = $2' : 'WHERE id = $1';
+    const params = tenantId ? [orderId, tenantId] : [orderId];
+    
     const currentOrder = await client.query(
-      'SELECT payment_status, order_status FROM orders WHERE id = $1',
-      [orderId]
+      `SELECT payment_status, order_status FROM orders ${whereClause}`,
+      params
     );
     
     if (currentOrder.rows.length === 0) {
@@ -86,22 +89,24 @@ export async function updateOrderStatus(pool, orderId, paymentProviderStatus, ch
     }
     
     // Atualizar pedido
+    const updateQuery = tenantId
+      ? 'UPDATE orders SET payment_status = $1, order_status = $2, payment_provider_status = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 AND tenant_id = $5'
+      : 'UPDATE orders SET payment_status = $1, order_status = $2, payment_provider_status = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4';
     await client.query(
-      `UPDATE orders 
-       SET payment_status = $1, 
-           order_status = $2, 
-           payment_provider_status = $3,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4`,
-      [newPaymentStatus, newOrderStatus, paymentProviderStatus, orderId]
+      updateQuery,
+      tenantId 
+        ? [newPaymentStatus, newOrderStatus, paymentProviderStatus, orderId, tenantId]
+        : [newPaymentStatus, newOrderStatus, paymentProviderStatus, orderId]
     );
     
     // Registrar histórico
     await client.query(
       `INSERT INTO order_status_history 
-       (order_id, previous_payment_status, new_payment_status, previous_order_status, new_order_status, changed_by, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [orderId, oldPaymentStatus, newPaymentStatus, oldOrderStatus, newOrderStatus, changedBy, notes]
+       (order_id, previous_payment_status, new_payment_status, previous_order_status, new_order_status, changed_by, notes${tenantId ? ', tenant_id' : ''})
+       VALUES ($1, $2, $3, $4, $5, $6, $7${tenantId ? ', $8' : ''})`,
+      tenantId
+        ? [orderId, oldPaymentStatus, newPaymentStatus, oldOrderStatus, newOrderStatus, changedBy, notes, tenantId]
+        : [orderId, oldPaymentStatus, newPaymentStatus, oldOrderStatus, newOrderStatus, changedBy, notes]
     );
     
     await client.query('COMMIT');

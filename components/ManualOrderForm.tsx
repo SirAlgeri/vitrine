@@ -171,9 +171,10 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
     e.preventDefault();
     
     try {
+      const token = localStorage.getItem('admin_token');
       const response = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           ...formData,
           payment_provider_status: formData.payment_status,

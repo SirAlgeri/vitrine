@@ -31,9 +31,11 @@ export const SalesDashboard: React.FC<SalesDashboardProps> = ({ onBack }) => {
 
   const loadOrders = async () => {
     try {
-      const res = await fetch('/api/orders');
+      const token = localStorage.getItem('admin_token');
+      const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch('/api/orders?limit=200', { headers });
       const data = await res.json();
-      setOrders(data);
+      setOrders(data.orders || data);
     } catch (err) {
       console.error(err);
     } finally {

@@ -10,3 +10,5 @@ backend/.env.swp
 .env.local
 backend/.env.local
 vitrinepro_prod.sql
+*.bak
+**/.env.backup

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { CartItem, AppConfig, CustomerInfo, ShippingInfo } from '../types';
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight, CheckCircle, MessageCircle, Truck } from 'lucide-react';
-import { applyMarkup } from '../services/pricing';
 import { calcularFrete } from '../services/freteService';
 
 interface CartDrawerProps {
@@ -76,8 +75,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   };
 
   const total = cart.reduce((sum, item) => {
-    const finalPrice = applyMarkup(item.price, config.markupPercentage || 0);
-    return sum + (finalPrice * item.quantity);
+    return sum + (item.price * item.quantity);
   }, 0);
   const freteValor = freteSelecionado?.valor || 0;
   const subtotal = total;
@@ -245,7 +243,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               ) : (
                 <div className="space-y-4">
                   {cart.map(item => {
-                    const finalPrice = applyMarkup(item.price, config.markupPercentage || 0);
                     return (
                     <div key={item.id} className="bg-slate-800 rounded-xl p-3 flex gap-4 border border-slate-700">
                       <div className="w-20 h-20 bg-slate-900 rounded-lg flex-shrink-0 overflow-hidden">
@@ -260,7 +257,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <div>
                           <h3 className="font-medium text-white line-clamp-1">{item.name}</h3>
                           <p className="text-sm text-slate-400">
-                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(finalPrice)}
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.price)}
                           </p>
                         </div>
                         

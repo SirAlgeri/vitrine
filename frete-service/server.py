@@ -3,7 +3,14 @@ import json
 import urllib.request
 import urllib.parse
 
+ALLOWED_ORIGINS = {'http://localhost:3001', 'http://127.0.0.1:3001'}
+
 class FreteHandler(BaseHTTPRequestHandler):
+    def _cors_headers(self):
+        origin = self.headers.get('Origin', '')
+        if origin in ALLOWED_ORIGINS:
+            self.send_header('Access-Control-Allow-Origin', origin)
+        
     def do_POST(self):
         if self.path == '/calcular':
             content_length = int(self.headers['Content-Length'])
@@ -14,19 +21,19 @@ class FreteHandler(BaseHTTPRequestHandler):
                 resultados = calcular_frete_correios(data)
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps(resultados).encode())
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': str(e)}).encode())
     
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._cors_headers()
         self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()

@@ -1,17 +1,14 @@
 import React from 'react';
 import { Product } from '../types';
 import { Eye, Info, ShoppingCart } from 'lucide-react';
-import { applyMarkup } from '../services/pricing';
 
 interface ProductCardProps {
   product: Product;
   onClick: (product: Product) => void;
   onAddToCart: (product: Product) => void;
-  markupPercentage?: number;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAddToCart, markupPercentage = 0 }) => {
-  const finalPrice = applyMarkup(product.price, markupPercentage);
+export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAddToCart }) => {
   const outOfStock = (product.stock_quantity || 0) === 0;
   
   return (
@@ -74,7 +71,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onClick, onAd
         
         <div className="flex items-center justify-between mt-auto pt-3">
           <span className="text-base sm:text-xl font-bold text-white tracking-tight">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(finalPrice)}
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(product.price)}
           </span>
           
           <button

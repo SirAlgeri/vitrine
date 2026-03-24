@@ -89,7 +89,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
       description: formData.description || '',
       image: formData.image || '',
       images: formData.images || [],
-      stock_quantity: formData.stock_quantity || 1,
+      stock_quantity: formData.stock_quantity ?? 1,
       createdAt: initialProduct?.createdAt || Date.now(),
       fields: formData.fields || {}
     };
@@ -210,8 +210,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
                     min="0"
                     step="1"
                     required
-                    value={formData.stock_quantity || 1}
-                    onChange={(e) => setFormData({...formData, stock_quantity: parseInt(e.target.value) || 0})}
+                    value={formData.stock_quantity}
+                    onChange={(e) => setFormData({...formData, stock_quantity: e.target.value === '' ? 0 : parseInt(e.target.value)})}
                     className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/50 transition-all text-lg font-semibold"
                 />
             </div>

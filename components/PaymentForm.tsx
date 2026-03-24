@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { CreditCard, QrCode, Loader2, Check, X } from 'lucide-react';
 import CreditCardVisual from './CreditCardVisual';
-import { getPixPrice } from '../services/pricing';
+
+const getPaymentHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('customerToken') || localStorage.getItem('admin_token');
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
 
 interface PaymentFormProps {
   amount: number;
@@ -13,10 +19,11 @@ interface PaymentFormProps {
     cpf: string;
     name: string;
   };
-  markupPercentage?: number;
+  pixDiscount?: number;
+  items?: { id: string; title: string; description?: string; quantity: number; unit_price: number }[];
 }
 
-export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onError, customerData, markupPercentage = 0 }: PaymentFormProps) {
+export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onError, customerData, pixDiscount = 0, items = [] }: PaymentFormProps) {
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'pix' | 'boleto'>('pix');
   const [loading, setLoading] = useState(false);
   const [mp, setMp] = useState<any>(null);
@@ -34,7 +41,7 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
   
   // Calcular desconto PIX apenas sobre produtos (sem frete)
   const productsAmount = amount - shippingAmount;
-  const pixDiscountOnProducts = productsAmount - getPixPrice(productsAmount, markupPercentage);
+  const pixDiscountOnProducts = pixDiscount;
   const pixAmount = amount - pixDiscountOnProducts; // Total com frete, desconto só nos produtos
 
   // PIX data
@@ -179,7 +186,7 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
       
       const response = await fetch('/api/mercadopago/process-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getPaymentHeaders(),
         body: JSON.stringify({
           token,
           transaction_amount: amount,
@@ -187,6 +194,7 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
           payment_method_id: paymentMethodId,
           issuer_id: issuerId,
           description: `Pedido - ${customerData.name}`,
+          items,
           payer: {
             email: customerData.email,
             identification: {
@@ -223,10 +231,11 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
       
       const response = await fetch('/api/mercadopago/create-pix', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getPaymentHeaders(),
         body: JSON.stringify({
           transaction_amount: pixAmount,
           description: `Pedido - ${customerData.name}`,
+          items,
           payer: {
             email: customerData.email,
             first_name: firstName,
@@ -268,10 +277,11 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
       
       const response = await fetch('/api/mercadopago/create-boleto', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getPaymentHeaders(),
         body: JSON.stringify({
           transaction_amount: amount,
           description: `Pedido - ${customerData.name}`,
+          items,
           payer: {
             email: customerData.email,
             first_name: firstName,
@@ -454,10 +464,10 @@ export default function PaymentForm({ amount, shippingAmount = 0, onSuccess, onE
       {/* PIX Payment */}
       {paymentMethod === 'pix' && (
         <div className="space-y-4">
-          {markupPercentage > 0 && (
+          {pixDiscount > 0 && (
             <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
               <p className="text-green-400 text-sm font-medium mb-1">
-                🎉 {markupPercentage}% de desconto no PIX!
+                🎉 Desconto no PIX!
               </p>
               <div className="flex items-baseline gap-2">
                 <span className="text-slate-400 line-through text-sm">

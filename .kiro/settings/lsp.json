@@ -23,7 +23,7 @@
     },
     "python": {
       "name": "pyright",
-      "command": "pyright-langserver",
+      "command": "/home/samuelalgeri/.local/bin/pyright-langserver",
       "args": [
         "--stdio"
       ],
@@ -168,7 +168,7 @@
     },
     "typescript": {
       "name": "typescript-language-server",
-      "command": "typescript-language-server",
+      "command": "/home/samuelalgeri/.nvm/versions/node/v20.19.5/bin/typescript-language-server",
       "args": [
         "--stdio"
       ],

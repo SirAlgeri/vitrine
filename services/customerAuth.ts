@@ -2,6 +2,15 @@ import { Customer, CustomerRegister, CustomerLogin } from '../types';
 
 const API_URL = '/api';
 
+function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem('customerToken');
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export const customerAuth = {
   register: async (data: CustomerRegister): Promise<Customer> => {
     const res = await fetch(`${API_URL}/customers/register`, {
@@ -14,6 +23,9 @@ export const customerAuth = {
       throw new Error(error.error || 'Erro ao cadastrar');
     }
     const result = await res.json();
+    if (result.token) {
+      localStorage.setItem('customerToken', result.token);
+    }
     return result.customer;
   },
 
@@ -28,11 +40,16 @@ export const customerAuth = {
       throw new Error(error.error || 'Erro ao fazer login');
     }
     const result = await res.json();
+    if (result.token) {
+      localStorage.setItem('customerToken', result.token);
+    }
     return result.customer;
   },
 
   getMe: async (id: string): Promise<Customer> => {
-    const res = await fetch(`${API_URL}/customers/me/${id}`);
+    const res = await fetch(`${API_URL}/customers/me/${id}`, {
+      headers: getAuthHeaders()
+    });
     if (!res.ok) throw new Error('Erro ao buscar dados');
     return res.json();
   },
@@ -40,7 +57,7 @@ export const customerAuth = {
   update: async (id: string, data: Partial<Customer>): Promise<Customer> => {
     const res = await fetch(`${API_URL}/customers/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(data)
     });
     if (!res.ok) throw new Error('Erro ao atualizar');
@@ -50,7 +67,7 @@ export const customerAuth = {
   changePassword: async (id: string, senha_atual: string, senha_nova: string): Promise<void> => {
     const res = await fetch(`${API_URL}/customers/${id}/password`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ senha_atual, senha_nova })
     });
     if (!res.ok) {
@@ -60,13 +77,26 @@ export const customerAuth = {
   },
 
   deleteAccount: async (id: string): Promise<void> => {
-    const res = await fetch(`${API_URL}/customers/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${API_URL}/customers/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
     if (!res.ok) throw new Error('Erro ao excluir conta');
   },
 
   getOrders: async (id: string): Promise<any[]> => {
-    const res = await fetch(`${API_URL}/orders/customer/${id}`);
+    const res = await fetch(`${API_URL}/orders/customer/${id}`, {
+      headers: getAuthHeaders()
+    });
     if (!res.ok) throw new Error('Erro ao buscar pedidos');
+    return res.json();
+  },
+
+  getAddresses: async (id: string): Promise<any[]> => {
+    const res = await fetch(`${API_URL}/customers/${id}/addresses`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Erro ao buscar endereços');
     return res.json();
   },
 
@@ -82,5 +112,6 @@ export const customerAuth = {
 
   clearSession: () => {
     localStorage.removeItem('customer');
+    localStorage.removeItem('customerToken');
   }
 };

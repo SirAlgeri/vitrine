@@ -4,7 +4,13 @@ import { Customer, CartItem, AppConfig } from '../types';
 import { ShoppingBag, Check } from 'lucide-react';
 import { validateCPF, formatCPF, formatCEP, fetchAddressByCEP } from '../services/validators';
 import PaymentForm from '../components/PaymentForm';
-import { applyMarkup } from '../services/pricing';
+
+const getCustomerHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('customerToken');
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
 
 interface CheckoutPageProps {
   customer: Customer | null;
@@ -85,7 +91,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
 
   const loadExistingOrder = async () => {
     try {
-      const res = await fetch(`/api/orders/${urlOrderId}`);
+      const res = await fetch(`/api/orders/${urlOrderId}`, {
+        headers: getCustomerHeaders()
+      });
       const data = await res.json();
       setExistingOrder(data);
     } catch (err) {
@@ -143,7 +151,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       try {
         await fetch(`/api/customers/${customer!.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getCustomerHeaders(),
           body: JSON.stringify({
             nome_completo: customer!.nome_completo,
             telefone: customer!.telefone,
@@ -163,7 +171,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
       try {
         await fetch(`/api/customers/${customer!.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getCustomerHeaders(),
           body: JSON.stringify({
             nome_completo: customer!.nome_completo,
             telefone: customer!.telefone,
@@ -194,7 +202,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
           // Atualizar pedido existente com dados de pagamento
           await fetch(`/api/orders/${urlOrderId}/payment`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getCustomerHeaders(),
             body: JSON.stringify({
               payment_id: paymentData?.id || null,
               payment_status: paymentData?.status || 'pending',
@@ -218,7 +226,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
           
           const response = await fetch('/api/orders', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getCustomerHeaders(),
             body: JSON.stringify({
               customer_id: customer!.id,
               customer_name: customer!.nome_completo,
@@ -235,9 +243,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
                 ...item,
                 product_id: item.id,
                 product_name: item.name,
-                product_price: applyMarkup(item.price, config.markupPercentage || 0),
+                product_price: item.price,
                 product_image: item.image,
-                subtotal: applyMarkup(item.price, config.markupPercentage || 0) * item.quantity
+                subtotal: item.price * item.quantity
               }))
             })
           });
@@ -293,11 +301,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
   }
 
   const total = existingOrder ? Number(existingOrder.total) : cart.reduce((sum, item) => {
-    const finalPrice = applyMarkup(item.price, config.markupPercentage || 0);
-    return sum + finalPrice * item.quantity;
+    return sum + item.price * item.quantity;
+  }, 0);
+  const pixTotal = existingOrder ? total : cart.reduce((sum, item) => {
+    return sum + (item.pix_price || item.price) * item.quantity;
   }, 0);
   const shippingAmount = shipping?.valor || shippingData?.valor || 0;
   const totalWithShipping = total + shippingAmount;
+  const pixDiscount = total - pixTotal;
   const currentShipping = shipping || shippingData;
   const currentStepIndex = steps.findIndex(s => s.id === currentStep);
   const items = existingOrder ? existingOrder.items : cart;
@@ -475,7 +486,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
               cpf: formData.cpf,
               name: customer.nome_completo
             }}
-            markupPercentage={config.markupPercentage || 0}
+            pixDiscount={pixDiscount}
+            items={cart.map(item => ({
+              id: item.id,
+              title: item.name,
+              description: item.description || '',
+              quantity: item.quantity,
+              unit_price: item.price
+            }))}
             onSuccess={(data) => {
               setPaymentData(data);
               setCurrentStep('review');
@@ -595,7 +613,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
               <h3 className="font-semibold text-white mb-2">Produtos</h3>
               <div className="space-y-3">
                 {items.map((item: any) => {
-                  const priceWithMarkup = applyMarkup(item.price, config.markupPercentage || 0);
                   return (
                     <div key={item.id} className="flex gap-3 items-center">
                       <img src={item.image || item.product_image} alt={item.name || item.product_name} className="w-16 h-16 object-cover rounded-lg" />
@@ -605,7 +622,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ customer, cart, conf
                       </div>
                       <span className="text-white font-semibold">
                         {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                          item.subtotal || (priceWithMarkup * item.quantity)
+                          item.subtotal || (item.price * item.quantity)
                         )}
                       </span>
                     </div>

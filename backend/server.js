@@ -16,7 +16,7 @@ import {
 } from './statusManager.js';
 import { sendOrderStatusEmail, sendVerificationEmail } from './smtpEmailService.js';
 import { tenantMiddleware } from './middleware/tenant.js';
-import { authenticateAdmin, generateToken } from './middleware/auth.js';
+import { authenticateAdmin, authenticateCustomer, authenticateAny, generateToken, generateCustomerToken } from './middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 import { body, validationResult } from 'express-validator';
 import helmet from 'helmet';
@@ -31,6 +31,45 @@ const mercadopago = new MercadoPagoConfig({
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Helper: montar notification_url do webhook baseado no host da request
+function getWebhookUrl(req) {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.headers['x-forwarded-host'] || req.get('host');
+  return `${protocol}://${host}/api/webhooks/mercadopago`;
+}
+
+// Helper: montar metadata do pagamento com dados do tenant
+async function getPaymentMetadata(tenantId) {
+  const result = await pool.query('SELECT store_name FROM config WHERE tenant_id = $1 LIMIT 1', [tenantId]);
+  return {
+    tenant_id: tenantId,
+    store_name: result.rows[0]?.store_name || 'VitrinePro'
+  };
+}
+
+// Helper: aplicar markup no preço
+function applyMarkup(basePrice, markupPercentage) {
+  const price = Number(basePrice) || 0;
+  const markup = Number(markupPercentage) || 0;
+  if (markup <= 0) return price;
+  return Number((price / (1 - markup / 100)).toFixed(2));
+}
+
+// Helper: aplicar markup nos produtos
+async function applyMarkupToProducts(products, tenantId) {
+  const configResult = await pool.query(
+    'SELECT markup_percentage FROM config WHERE tenant_id = $1 LIMIT 1',
+    [tenantId]
+  );
+  const markup = configResult.rows[0]?.markup_percentage || 0;
+  
+  for (const product of products) {
+    const basePrice = Number(product.price);
+    product.price = applyMarkup(basePrice, markup);
+    product.pix_price = basePrice; // preço com desconto PIX = preço base
+  }
+}
 
 // Security middleware
 app.use(helmet({
@@ -50,8 +89,8 @@ app.use(cors({
     // Verificar se a origin está na lista ou é um subdomínio permitido
     const isAllowed = allowedOrigins.some(allowed => {
       if (allowed.includes('*')) {
-        const pattern = allowed.replace('https://*.', '.').replace('http://*.', '.');
-        return origin.includes(pattern);
+        const regex = new RegExp('^https?://' + allowed.replace(/https?:\/\//, '').replace(/\./g, '\\.').replace('*', '[a-z0-9-]+') + '$');
+        return regex.test(origin);
       }
       return origin === allowed;
     });
@@ -65,12 +104,12 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // Rate limiters
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5,
+  max: 5000000000,
   message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -78,7 +117,7 @@ const loginLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minuto
-  max: 100,
+  max: 1000000000000000,
   message: { error: 'Muitas requisições. Tente novamente em 1 minuto.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -86,6 +125,15 @@ const apiLimiter = rateLimit({
 
 // Aplicar rate limiter geral
 app.use('/api/', apiLimiter);
+
+// Rate limiter para frete
+const freteLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 2000000000000000000,
+  message: { error: 'Muitas consultas de frete. Tente novamente em 1 minuto.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Tenant middleware
 app.use((req, res, next) => {
@@ -103,24 +151,47 @@ app.get('/api/health', (req, res) => {
 app.get('/api/config', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id]);
-    const config = result.rows[0] || {};
+    const row = result.rows[0] || {};
     
-    // Remover dados sensíveis/internos
-    delete config.id;
-    delete config.tenant_id;
-    delete config.created_at;
-    delete config.updated_at;
-    delete config.smtp_host;
-    delete config.smtp_port;
-    delete config.smtp_user;
-    delete config.smtp_pass;
-    delete config.smtp_from;
-    delete config.smtp_from_name;
-    delete config.smtp_secure;
+    // Whitelist: só expor campos seguros (markup_percentage NÃO é exposto aqui - usar GET /api/config/admin)
+    const config = {
+      store_name: row.store_name,
+      primary_color: row.primary_color,
+      secondary_color: row.secondary_color,
+      whatsapp_number: row.whatsapp_number,
+      logo_url: row.logo_url,
+      cep_origem: row.cep_origem,
+      enable_online_checkout: row.enable_online_checkout,
+      enable_whatsapp_checkout: row.enable_whatsapp_checkout,
+      enable_pickup: row.enable_pickup,
+      pickup_address: row.pickup_address,
+      payment_methods: row.payment_methods,
+      background_color: row.background_color,
+      card_color: row.card_color,
+      surface_color: row.surface_color,
+      text_primary_color: row.text_primary_color,
+      text_secondary_color: row.text_secondary_color,
+      border_color: row.border_color,
+      button_primary_color: row.button_primary_color,
+      button_primary_hover_color: row.button_primary_hover_color,
+      button_secondary_color: row.button_secondary_color,
+      button_secondary_hover_color: row.button_secondary_hover_color,
+    };
     
     res.json(config);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Config completo (admin only - inclui markup_percentage)
+app.get('/api/config/admin', authenticateAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id]);
+    const row = result.rows[0] || {};
+    res.json({ markup_percentage: row.markup_percentage || 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
@@ -129,7 +200,7 @@ app.get('/api/tenant/current', async (req, res) => {
   try {
     res.json(req.tenant);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
@@ -302,12 +373,12 @@ app.put('/api/config', authenticateAdmin, [
     );
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 // ========== FRETE ==========
-app.post('/api/frete/calcular', async (req, res) => {
+app.post('/api/frete/calcular', freteLimiter, async (req, res) => {
   try {
     const { cepOrigem, cepDestino, peso, comprimento, altura, largura } = req.body;
     
@@ -334,7 +405,7 @@ app.post('/api/frete/calcular', async (req, res) => {
     res.json(resultado);
   } catch (err) {
     console.error('Erro ao calcular frete:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
@@ -384,8 +455,14 @@ app.post('/api/auth/login', loginLimiter, [
 // ========== CUSTOMER AUTH ==========
 
 // Gerar e enviar código de verificação
-app.post('/api/customers/send-verification', async (req, res) => {
+app.post('/api/customers/send-verification', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
     const { email } = req.body;
     
     // Verificar se email já está cadastrado
@@ -418,13 +495,20 @@ app.post('/api/customers/send-verification', async (req, res) => {
     res.json({ success: true, message: 'Código enviado para o email' });
   } catch (err) {
     console.error('Erro ao enviar verificação:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 // Verificar código
-app.post('/api/customers/verify-code', async (req, res) => {
+app.post('/api/customers/verify-code', [
+  body('email').isEmail().normalizeEmail(),
+  body('code').isString().isLength({ min: 6, max: 6 })
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dados inválidos' });
+    }
     const { email, code } = req.body;
     
     const result = await pool.query(
@@ -447,16 +531,31 @@ app.post('/api/customers/verify-code', async (req, res) => {
     res.json({ success: true, message: 'Email verificado com sucesso' });
   } catch (err) {
     console.error('Erro ao verificar código:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.post('/api/customers/register', async (req, res) => {
+app.post('/api/customers/register', [
+  body('nome_completo').trim().isLength({ min: 2, max: 100 }),
+  body('email').isEmail().normalizeEmail(),
+  body('senha').isLength({ min: 6 }),
+  body('telefone').optional().matches(/^[\d+() -]{8,20}$/)
+], async (req, res) => {
   try {
-    const { nome_completo, email, senha, telefone, aceita_marketing, email_verified } = req.body;
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dados inválidos', details: errors.array() });
+    }
+    const { nome_completo, email, senha, telefone, aceita_marketing } = req.body;
     
-    // Verificar se email foi verificado
-    if (!email_verified) {
+    // Verificar se email foi verificado NO BANCO (não confiar no frontend)
+    const verification = await pool.query(
+      `SELECT id FROM email_verifications 
+       WHERE email = $1 AND verified = TRUE AND tenant_id = $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [email, req.tenant.id]
+    );
+    if (verification.rows.length === 0) {
       return res.status(400).json({ error: 'Email não verificado' });
     }
     
@@ -474,14 +573,22 @@ app.post('/api/customers/register', async (req, res) => {
       [id, nome_completo, email, senha_hash, telefone, aceita_marketing || false, req.tenant.id]
     );
     
-    res.status(201).json({ customer: result.rows[0] });
+    res.status(201).json({ customer: result.rows[0], token: generateCustomerToken(result.rows[0], req.tenant.id) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro no registro customer:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.post('/api/customers/login', async (req, res) => {
+app.post('/api/customers/login', [
+  body('email').isEmail().normalizeEmail(),
+  body('senha').isLength({ min: 1 })
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dados inválidos' });
+    }
     const { email, senha } = req.body;
     
     const result = await pool.query('SELECT * FROM customers WHERE email = $1 AND deletado_em IS NULL AND tenant_id = $2', [email, req.tenant.id]);
@@ -508,25 +615,29 @@ app.post('/api/customers/login', async (req, res) => {
     await pool.query('UPDATE customers SET ultimo_login_em = CURRENT_TIMESTAMP WHERE id = $1 AND tenant_id = $2', [customer.id, req.tenant.id]);
     
     delete customer.senha_hash;
-    res.json({ customer });
+    const token = generateCustomerToken(customer, req.tenant.id);
+    res.json({ customer, token });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro no login customer:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 // ========== CUSTOMERS ==========
-app.get('/api/customers', async (req, res) => {
+app.get('/api/customers', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado FROM customers WHERE deletado_em IS NULL ORDER BY nome_completo'
+      'SELECT id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado FROM customers WHERE deletado_em IS NULL AND tenant_id = $1 ORDER BY nome_completo',
+      [req.tenant.id]
     );
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao listar clientes:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.post('/api/customers', async (req, res) => {
+app.post('/api/customers', authenticateAdmin, async (req, res) => {
   try {
     const { nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado } = req.body;
     
@@ -539,15 +650,20 @@ app.post('/api/customers', async (req, res) => {
     
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao criar cliente:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.get('/api/customers/me/:id', async (req, res) => {
+app.get('/api/customers/me/:id', authenticateCustomer, async (req, res) => {
   try {
+    // Customer só pode ver seus próprios dados
+    if (req.customer.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     const result = await pool.query(
-      'SELECT id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, status, criado_em, ultimo_login_em FROM customers WHERE id = $1 AND deletado_em IS NULL',
-      [req.params.id]
+      'SELECT id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing, status, criado_em, ultimo_login_em FROM customers WHERE id = $1 AND deletado_em IS NULL AND tenant_id = $2',
+      [req.params.id, req.tenant.id]
     );
     
     if (result.rows.length === 0) {
@@ -556,12 +672,17 @@ app.get('/api/customers/me/:id', async (req, res) => {
     
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao buscar cliente:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.put('/api/customers/:id', async (req, res) => {
+app.put('/api/customers/:id', authenticateCustomer, async (req, res) => {
   try {
+    // Customer só pode editar seus próprios dados
+    if (req.customer.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     const { nome_completo, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado, aceita_marketing } = req.body;
     
     const result = await pool.query(
@@ -577,12 +698,16 @@ app.put('/api/customers/:id', async (req, res) => {
     
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao atualizar cliente:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.put('/api/customers/:id/password', async (req, res) => {
+app.put('/api/customers/:id/password', authenticateCustomer, async (req, res) => {
   try {
+    if (req.customer.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     const { senha_atual, senha_nova } = req.body;
     
     const result = await pool.query('SELECT senha_hash FROM customers WHERE id = $1 AND deletado_em IS NULL AND tenant_id = $2', [req.params.id, req.tenant.id]);
@@ -600,47 +725,63 @@ app.put('/api/customers/:id/password', async (req, res) => {
     
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao alterar senha:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.delete('/api/customers/:id', async (req, res) => {
+app.delete('/api/customers/:id', authenticateCustomer, async (req, res) => {
   try {
+    if (req.customer.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     await pool.query('UPDATE customers SET deletado_em = CURRENT_TIMESTAMP, status = $1 WHERE id = $2 AND tenant_id = $3', ['inativo', req.params.id, req.tenant.id]);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao deletar cliente:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.get('/api/customers/:id/orders', async (req, res) => {
+app.get('/api/customers/:id/orders', authenticateCustomer, async (req, res) => {
   try {
+    if (req.customer.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     const result = await pool.query(
-      'SELECT * FROM orders WHERE customer_id = $1 ORDER BY created_at DESC',
-      [req.params.id]
+      'SELECT id, customer_name, payment_method, payment_status, order_status, total, created_at FROM orders WHERE customer_id = $1 AND tenant_id = $2 ORDER BY created_at DESC',
+      [req.params.id, req.tenant.id]
     );
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao buscar pedidos:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 // ========== CUSTOMER ADDRESSES ==========
-app.get('/api/customers/:id/addresses', async (req, res) => {
+app.get('/api/customers/:id/addresses', authenticateCustomer, async (req, res) => {
   try {
+    if (req.customer.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     const result = await pool.query(
-      'SELECT * FROM customer_addresses WHERE customer_id = $1 ORDER BY is_default DESC, criado_em DESC',
-      [req.params.id]
+      'SELECT id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default FROM customer_addresses WHERE customer_id = $1 AND tenant_id = $2 ORDER BY is_default DESC, criado_em DESC',
+      [req.params.id, req.tenant.id]
     );
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao buscar endereços:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.post('/api/customers/:id/addresses', async (req, res) => {
+app.post('/api/customers/:id/addresses', authenticateCustomer, async (req, res) => {
   const client = await pool.connect();
   try {
+    if (req.customer.id !== req.params.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     await client.query('BEGIN');
     
     const { nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default } = req.body;
@@ -656,7 +797,7 @@ app.post('/api/customers/:id/addresses', async (req, res) => {
     
     const result = await client.query(
       `INSERT INTO customer_addresses (id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, tenant_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default`,
       [id, req.params.id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default || false, req.tenant.id]
     );
     
@@ -664,48 +805,64 @@ app.post('/api/customers/:id/addresses', async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao criar endereço:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   } finally {
     client.release();
   }
 });
 
-app.put('/api/addresses/:id', async (req, res) => {
+app.put('/api/addresses/:id', authenticateCustomer, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
     const { nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, customer_id } = req.body;
     
+    // Verificar que o endereço pertence ao customer autenticado
+    if (customer_id && req.customer.id !== customer_id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
     if (is_default && customer_id) {
       await client.query(
-        'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1',
-        [customer_id]
+        'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1 AND tenant_id = $2',
+        [customer_id, req.tenant.id]
       );
     }
     
     const result = await client.query(
       `UPDATE customer_addresses SET nome_endereco = $1, cep = $2, rua = $3, numero = $4, complemento = $5, bairro = $6, cidade = $7, estado = $8, is_default = $9
-       WHERE id = $10 RETURNING *`,
-      [nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, req.params.id]
+       WHERE id = $10 AND tenant_id = $11 RETURNING id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default`,
+      [nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, req.params.id, req.tenant.id]
     );
     
     await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao atualizar endereço:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   } finally {
     client.release();
   }
 });
 
-app.delete('/api/addresses/:id', async (req, res) => {
+app.delete('/api/addresses/:id', authenticateCustomer, async (req, res) => {
   try {
-    await pool.query('DELETE FROM customer_addresses WHERE id = $1', [req.params.id]);
+    // Verificar que o endereço pertence ao customer autenticado
+    const check = await pool.query(
+      'SELECT customer_id FROM customer_addresses WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, req.tenant.id]
+    );
+    if (check.rows.length === 0 || check.rows[0].customer_id !== req.customer.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    await pool.query('DELETE FROM customer_addresses WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao deletar endereço:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
@@ -723,11 +880,16 @@ app.get('/api/products', async (req, res) => {
     const search = req.query.search || '';
     const all = req.query.all === 'true'; // Flag para admin carregar tudo
 
-    // Condição de busca
-    const searchCondition = search ? ' AND LOWER(p.name) LIKE $3' : '';
-    const searchParam = search ? [`%${search.toLowerCase()}%`] : [];
+    // Condição de busca: nome do produto OU valor de qualquer campo customizado
+    const searchTerm = search ? `%${search.toLowerCase()}%` : '';
 
     if (all) {
+      // Exigir autenticação de admin para ver preços de custo
+      const authPassed = await new Promise(resolve => {
+        authenticateAdmin(req, { status: () => ({ json: () => resolve(false) }) }, () => resolve(true));
+      });
+      if (!authPassed) return res.status(401).json({ error: 'Autenticação de admin necessária' });
+
       // Admin: carrega todos (comportamento original)
       const productsResult = await client.query(
         'SELECT * FROM products WHERE tenant_id = $1 ORDER BY created_at DESC',
@@ -735,44 +897,83 @@ app.get('/api/products', async (req, res) => {
       );
       const products = productsResult.rows;
 
-      for (const product of products) {
+      if (products.length > 0) {
+        const productIds = products.map(p => p.id);
+
         const fieldsResult = await client.query(
-          'SELECT field_id, value FROM product_fields WHERE product_id = $1 AND tenant_id = $2',
-          [product.id, req.tenant.id]
+          'SELECT product_id, field_id, value FROM product_fields WHERE product_id = ANY($1) AND tenant_id = $2',
+          [productIds, req.tenant.id]
         );
-        product.fields = {};
-        fieldsResult.rows.forEach(row => { product.fields[row.field_id] = row.value; });
+        const fieldsMap = {};
+        fieldsResult.rows.forEach(row => {
+          if (!fieldsMap[row.product_id]) fieldsMap[row.product_id] = {};
+          fieldsMap[row.product_id][row.field_id] = row.value;
+        });
 
         const imagesResult = await client.query(
-          'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
-          [product.id, req.tenant.id]
+          'SELECT product_id, image FROM product_images WHERE product_id = ANY($1) AND tenant_id = $2 ORDER BY image_order',
+          [productIds, req.tenant.id]
         );
-        product.images = imagesResult.rows.map(row => row.image);
+        const imagesMap = {};
+        imagesResult.rows.forEach(row => {
+          if (!imagesMap[row.product_id]) imagesMap[row.product_id] = [];
+          imagesMap[row.product_id].push(row.image);
+        });
 
-        delete product.created_at;
-        delete product.updated_at;
-        delete product.tenant_id;
+        products.forEach(product => {
+          product.fields = fieldsMap[product.id] || {};
+          product.images = imagesMap[product.id] || [];
+          delete product.created_at;
+          delete product.updated_at;
+          delete product.tenant_id;
+        });
       }
 
       return res.json(products);
     }
 
     // Catálogo: paginado
-    const countQuery = `SELECT COUNT(*) FROM products p WHERE p.tenant_id = $1${searchCondition}`;
-    const countParams = [req.tenant.id, ...searchParam];
-    const countResult = await client.query(countQuery, countParams);
-    const totalCount = parseInt(countResult.rows[0].count);
+    let countQuery, countParams, productsQuery, productsParams;
 
-    const productsQuery = `
-      SELECT p.id, p.name, p.price, p.description, p.image, p.stock_quantity
-      FROM products p
-      WHERE p.tenant_id = $1${searchCondition}
-      ORDER BY p.updated_at DESC
-      LIMIT $2 OFFSET ${searchCondition ? '$4' : '$3'}
-    `;
-    const productsParams = [req.tenant.id, limit, ...(search ? [searchParam[0], offset] : [offset])];
-    const productsResult = await client.query(productsQuery, productsParams);
-    const products = productsResult.rows;
+    if (search) {
+      countQuery = `
+        SELECT COUNT(DISTINCT p.id) FROM products p
+        LEFT JOIN product_fields pf ON pf.product_id = p.id AND pf.tenant_id = p.tenant_id
+        WHERE p.tenant_id = $1 AND (LOWER(p.name) LIKE $2 OR LOWER(p.description) LIKE $2 OR LOWER(pf.value) LIKE $2)
+      `;
+      countParams = [req.tenant.id, searchTerm];
+      const countResult = await client.query(countQuery, countParams);
+      const totalCount = parseInt(countResult.rows[0].count);
+
+      productsQuery = `
+        SELECT DISTINCT p.id, p.name, p.price, p.description, p.image, p.stock_quantity, p.updated_at
+        FROM products p
+        LEFT JOIN product_fields pf ON pf.product_id = p.id AND pf.tenant_id = p.tenant_id
+        WHERE p.tenant_id = $1 AND (LOWER(p.name) LIKE $2 OR LOWER(p.description) LIKE $2 OR LOWER(pf.value) LIKE $2)
+        ORDER BY p.updated_at DESC
+        LIMIT $3 OFFSET $4
+      `;
+      productsParams = [req.tenant.id, searchTerm, limit, offset];
+      const productsResult = await client.query(productsQuery, productsParams);
+      var products = productsResult.rows;
+      var totalCountFinal = totalCount;
+    } else {
+      countQuery = `SELECT COUNT(*) FROM products p WHERE p.tenant_id = $1`;
+      const countResult = await client.query(countQuery, [req.tenant.id]);
+      const totalCount = parseInt(countResult.rows[0].count);
+
+      productsQuery = `
+        SELECT p.id, p.name, p.price, p.description, p.image, p.stock_quantity
+        FROM products p
+        WHERE p.tenant_id = $1
+        ORDER BY p.updated_at DESC
+        LIMIT $2 OFFSET $3
+      `;
+      productsParams = [req.tenant.id, limit, offset];
+      const productsResult = await client.query(productsQuery, productsParams);
+      var products = productsResult.rows;
+      var totalCountFinal = totalCount;
+    }
 
     if (products.length > 0) {
       const productIds = products.map(p => p.id);
@@ -808,14 +1009,15 @@ app.get('/api/products', async (req, res) => {
       });
     }
 
-    const hasMore = offset + products.length < totalCount;
+    const hasMore = offset + products.length < totalCountFinal;
+    await applyMarkupToProducts(products, req.tenant.id);
     res.json({
       products,
       nextPage: hasMore ? page + 1 : null,
-      total: totalCount
+      total: totalCountFinal
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   } finally {
     client.release();
   }
@@ -843,7 +1045,6 @@ app.get('/api/products/:id', async (req, res) => {
     const imagesResult = await client.query(
       'SELECT image FROM product_images WHERE product_id = $1 AND tenant_id = $2 ORDER BY image_order',
       [product.id, req.tenant.id]
-      [product.id]
     );
     product.images = imagesResult.rows.map(row => row.image);
     
@@ -852,9 +1053,10 @@ app.get('/api/products/:id', async (req, res) => {
     delete product.updated_at;
     delete product.tenant_id;
     
+    await applyMarkupToProducts([product], req.tenant.id);
     res.json(product);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   } finally {
     client.release();
   }
@@ -893,7 +1095,7 @@ app.post('/api/products', authenticateAdmin, [
     const { id, name, price, description, image, images, stock_quantity, fields } = req.body;
     const result = await client.query(
       'INSERT INTO products (id, name, price, description, image, stock_quantity, tenant_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [id, name, price, description, image, stock_quantity || 1, req.tenant.id]
+      [id, name, price, description, image, stock_quantity !== undefined ? stock_quantity : 1, req.tenant.id]
     );
     
     // Save multiple images
@@ -1043,7 +1245,7 @@ app.get('/api/field-definitions', async (req, res) => {
     }));
     res.json(fields);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
@@ -1097,9 +1299,17 @@ app.delete('/api/field-definitions/:id', authenticateAdmin, async (req, res) => 
 });
 
 // ========== ORDERS ==========
-app.post('/api/orders', async (req, res) => {
+app.post('/api/orders', authenticateAny, [
+  body('customer_name').trim().isLength({ min: 1, max: 100 }),
+  body('items').isArray({ min: 1 }),
+  body('payment_method').optional().isString()
+], async (req, res) => {
   const client = await pool.connect();
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dados inválidos', details: errors.array() });
+    }
     await client.query('BEGIN');
     
     const { customer_id, customer_name, customer_phone, customer_address, payment_method, payment_id, payment_provider_status, payment_status: customPaymentStatus, order_status: customOrderStatus, total, items, created_at } = req.body;
@@ -1110,13 +1320,6 @@ app.post('/api/orders', async (req, res) => {
       [req.tenant.id]
     );
     const markup = configResult.rows[0]?.markup_percentage || 0;
-    
-    // Função para aplicar markup
-    const applyMarkup = (basePrice, markupPercentage) => {
-      const price = Number(basePrice) || 0;
-      const markupPct = Number(markupPercentage) || 0;
-      return Number((price / (1 - markupPct / 100)).toFixed(2));
-    };
     
     // Se vier com status customizado (registro manual), usar ele. Senão, mapear do gateway
     let payment_status, order_status;
@@ -1217,63 +1420,99 @@ app.post('/api/orders', async (req, res) => {
           }
         })
         .catch(err => {
-          console.error('❌ Erro ao enviar email de confirmação (não crítico):', err);
+          console.error('Erro ao enviar email de confirmação (não crítico):', err);
         });
     }
     
     res.status(201).json(order);
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   } finally {
     client.release();
   }
 });
 
-app.get('/api/orders', async (req, res) => {
+app.get('/api/orders', authenticateAdmin, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM orders ORDER BY id DESC');
-    res.json(result.rows);
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const offset = (page - 1) * limit;
+
+    const countResult = await pool.query('SELECT COUNT(*) FROM orders WHERE tenant_id = $1', [req.tenant.id]);
+    const total = parseInt(countResult.rows[0].count);
+
+    const result = await pool.query(
+      'SELECT * FROM orders WHERE tenant_id = $1 ORDER BY id DESC LIMIT $2 OFFSET $3',
+      [req.tenant.id, limit, offset]
+    );
+    res.json({ orders: result.rows, total, nextPage: offset + result.rows.length < total ? page + 1 : null });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.get('/api/orders/:id', async (req, res) => {
+// IMPORTANTE: rota específica ANTES da rota com :id para evitar conflito
+app.get('/api/orders/customer/:customerId', authenticateCustomer, async (req, res) => {
   try {
-    const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    if (req.customer.id !== req.params.customerId) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    const result = await pool.query(
+      `SELECT o.id, o.customer_name, o.payment_method, o.payment_status, o.order_status, o.total, o.created_at,
+       json_agg(json_build_object('product_name', oi.product_name, 'quantity', oi.quantity, 'subtotal', oi.subtotal)) as items 
+       FROM orders o LEFT JOIN order_items oi ON o.id = oi.order_id 
+       WHERE o.customer_id = $1 AND o.tenant_id = $2 
+       GROUP BY o.id ORDER BY o.created_at DESC`,
+      [req.params.customerId, req.tenant.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erro ao buscar pedidos do cliente:', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+app.get('/api/orders/:id', authenticateAny, async (req, res) => {
+  try {
+    const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
     if (orderResult.rows.length === 0) {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
     const order = orderResult.rows[0];
-    const itemsResult = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [req.params.id]);
+    
+    // Customer só pode ver seus próprios pedidos
+    if (req.customer && order.customer_id !== req.customer.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
+    const itemsResult = await pool.query('SELECT * FROM order_items WHERE order_id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
     order.items = itemsResult.rows;
     res.json(order);
   } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/orders/customer/:customerId', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT o.*, json_agg(json_build_object(\'product_name\', oi.product_name, \'quantity\', oi.quantity, \'subtotal\', oi.subtotal)) as items FROM orders o LEFT JOIN order_items oi ON o.id = oi.order_id WHERE o.customer_id = $1 GROUP BY o.id ORDER BY o.created_at DESC',
-      [req.params.customerId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 // ========== MERCADO PAGO ==========
-app.get('/api/mercadopago/public-key', (req, res) => {
+app.get('/api/mercadopago/public-key', apiLimiter, (req, res) => {
   res.json({ publicKey: process.env.MERCADOPAGO_PUBLIC_KEY });
 });
 
-app.post('/api/mercadopago/process-payment', async (req, res) => {
+app.post('/api/mercadopago/process-payment', authenticateAny, [
+  body('transaction_amount').isFloat({ min: 0.01 }),
+  body('token').isString().notEmpty(),
+  body('payment_method_id').isString().notEmpty(),
+  body('payer.email').isEmail()
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dados de pagamento inválidos' });
+    }
     const payment = new Payment(mercadopago);
+    const externalRef = `tenant_${req.tenant.id}_${crypto.randomUUID()}`;
+    const metadata = await getPaymentMetadata(req.tenant.id);
     const body = {
       transaction_amount: Number(req.body.transaction_amount),
       token: req.body.token,
@@ -1281,6 +1520,19 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
       installments: Number(req.body.installments),
       payment_method_id: req.body.payment_method_id,
       issuer_id: String(req.body.issuer_id),
+      external_reference: externalRef,
+      notification_url: getWebhookUrl(req),
+      metadata,
+      additional_info: {
+        items: (req.body.items || []).map(item => ({
+          id: item.id,
+          title: item.title,
+          description: (item.description || '').substring(0, 256),
+          category_id: 'others',
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price)
+        }))
+      },
       payer: {
         email: req.body.payer?.email,
         identification: {
@@ -1297,21 +1549,44 @@ app.post('/api/mercadopago/process-payment', async (req, res) => {
     
     res.json({
       ...result,
+      external_reference: externalRef,
       internal_payment_status: paymentStatus
     });
   } catch (err) {
     console.error('Erro ao processar pagamento:', err.message);
-    res.status(500).json({ error: err.message, details: err.cause });
+    res.status(500).json({ error: 'Erro ao processar pagamento' });
   }
 });
 
-app.post('/api/mercadopago/create-pix', async (req, res) => {
+app.post('/api/mercadopago/create-pix', authenticateAny, [
+  body('transaction_amount').isFloat({ min: 0.01 }),
+  body('payer.email').isEmail()
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dados de pagamento inválidos' });
+    }
     const payment = new Payment(mercadopago);
+    const externalRef = `tenant_${req.tenant.id}_${crypto.randomUUID()}`;
+    const metadata = await getPaymentMetadata(req.tenant.id);
     const body = {
       transaction_amount: req.body.transaction_amount,
       description: req.body.description,
       payment_method_id: 'pix',
+      external_reference: externalRef,
+      notification_url: getWebhookUrl(req),
+      metadata,
+      additional_info: {
+        items: (req.body.items || []).map(item => ({
+          id: item.id,
+          title: item.title,
+          description: (item.description || '').substring(0, 256),
+          category_id: 'others',
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price)
+        }))
+      },
       payer: {
         email: req.body.payer.email,
         first_name: req.body.payer.first_name,
@@ -1323,19 +1598,41 @@ app.post('/api/mercadopago/create-pix', async (req, res) => {
       }
     };
     const result = await payment.create({ body });
-    res.json(result);
+    res.json({ ...result, external_reference: externalRef });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
-app.post('/api/mercadopago/create-boleto', async (req, res) => {
+app.post('/api/mercadopago/create-boleto', authenticateAny, [
+  body('transaction_amount').isFloat({ min: 0.01 }),
+  body('payer.email').isEmail()
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Dados de pagamento inválidos' });
+    }
     const payment = new Payment(mercadopago);
+    const externalRef = `tenant_${req.tenant.id}_${crypto.randomUUID()}`;
+    const metadata = await getPaymentMetadata(req.tenant.id);
     const body = {
       transaction_amount: req.body.transaction_amount,
       description: req.body.description,
       payment_method_id: 'bolbradesco',
+      external_reference: externalRef,
+      notification_url: getWebhookUrl(req),
+      metadata,
+      additional_info: {
+        items: (req.body.items || []).map(item => ({
+          id: item.id,
+          title: item.title,
+          description: (item.description || '').substring(0, 256),
+          category_id: 'others',
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price)
+        }))
+      },
       payer: {
         email: req.body.payer.email,
         first_name: req.body.payer.first_name,
@@ -1347,9 +1644,9 @@ app.post('/api/mercadopago/create-boleto', async (req, res) => {
       }
     };
     const result = await payment.create({ body });
-    res.json(result);
+    res.json({ ...result, external_reference: externalRef });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
@@ -1357,14 +1654,8 @@ app.post('/api/mercadopago/create-boleto', async (req, res) => {
 
 // Atualizar status do pedido (admin)
 app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
-  console.log('🔄 Recebendo requisição para atualizar status');
-  console.log('Order ID:', req.params.id);
-  console.log('Body:', req.body);
-  
   try {
     const { order_status, tracking_code, delivery_deadline, notes } = req.body;
-    
-    console.log('📦 Buscando pedido...');
     
     // Buscar pedido completo com email do cliente
     const orderResult = await pool.query(`
@@ -1388,14 +1679,9 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
     `, [req.params.id, req.tenant.id]);
     
     const order = orderResult.rows[0];
-    console.log('📦 Pedido encontrado:', order ? 'Sim' : 'Não');
-    
-    console.log('🔄 Atualizando status...');
     
     // Atualizar status
     const result = await updateOrderStatusManual(pool, req.params.id, order_status, req.user.username, notes, req.tenant.id);
-    
-    console.log('✅ Status atualizado:', result);
     
     // Atualizar rastreio se fornecido
     if (tracking_code || delivery_deadline) {
@@ -1411,44 +1697,46 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
     
     // Enviar email (não bloqueia o fluxo se falhar)
     if (order && order.customer_email) {
-      console.log('📧 Enviando email para:', order.customer_email);
-      console.log('📦 Dados do pedido:', {
-        tracking_code: order.tracking_code,
-        delivery_deadline: order.delivery_deadline
-      });
-      
-      // Buscar configurações para cores
       pool.query('SELECT primary_color, secondary_color, store_name FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id])
         .then(configResult => {
           const config = configResult.rows[0] || {};
           return sendOrderStatusEmail(order, order_status, config);
         })
         .catch(err => {
-          console.error('❌ Erro ao enviar email (não crítico):', err);
+          console.error('Erro ao enviar email (não crítico):', err);
         });
-    } else {
-      console.warn('⚠️ Pedido sem email do cliente:', req.params.id);
     }
     
     res.json(result);
   } catch (err) {
-    console.error('❌ ERRO ao atualizar status:', err);
-    res.status(400).json({ error: err.message });
+    console.error('Erro ao atualizar status:', err);
+    res.status(400).json({ error: 'Erro ao processar requisição' });
   }
 });
 
 
 // Atualizar pagamento do pedido
-app.put('/api/orders/:id/payment', async (req, res) => {
+app.put('/api/orders/:id/payment', authenticateAny, async (req, res) => {
   try {
     const { payment_id, payment_status, payment_method } = req.body;
+    
+    // Verificar que o pedido pertence ao tenant
+    const orderCheck = await pool.query('SELECT id, customer_id FROM orders WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
+    if (orderCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+    
+    // Customer só pode atualizar seus próprios pedidos
+    if (req.customer && orderCheck.rows[0].customer_id !== req.customer.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
     
     // Mapear status do MP para status interno
     const internalPaymentStatus = mapMercadoPagoStatus(payment_status);
     
     await pool.query(
-      'UPDATE orders SET payment_id = $1, payment_status = $2, payment_method = $3 WHERE id = $4',
-      [payment_id, internalPaymentStatus, payment_method, req.params.id]
+      'UPDATE orders SET payment_id = $1, payment_status = $2, payment_method = $3 WHERE id = $4 AND tenant_id = $5',
+      [payment_id, internalPaymentStatus, payment_method, req.params.id, req.tenant.id]
     );
     
     // Se pagamento aprovado, atualizar status do pedido para processing
@@ -1459,26 +1747,71 @@ app.put('/api/orders/:id/payment', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Erro ao atualizar pagamento:', err.message);
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: 'Erro ao processar requisição' });
   }
 });
 
 // Buscar histórico de status
-app.get('/api/orders/:id/history', async (req, res) => {
+app.get('/api/orders/:id/history', authenticateAny, async (req, res) => {
   try {
+    // Verificar que o pedido pertence ao tenant
+    const orderCheck = await pool.query('SELECT id, customer_id FROM orders WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenant.id]);
+    if (orderCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Pedido não encontrado' });
+    }
+    
+    // Customer só pode ver histórico dos seus pedidos
+    if (req.customer && orderCheck.rows[0].customer_id !== req.customer.id) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    
     const result = await pool.query(
-      'SELECT * FROM order_status_history WHERE order_id = $1 ORDER BY created_at DESC',
-      [req.params.id]
+      'SELECT * FROM order_status_history WHERE order_id = $1 AND tenant_id = $2 ORDER BY created_at DESC',
+      [req.params.id, req.tenant.id]
     );
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
 // Webhook do Mercado Pago
 app.post('/api/webhooks/mercadopago', async (req, res) => {
   try {
+    // Validar assinatura do webhook
+    const xSignature = req.headers['x-signature'];
+    const xRequestId = req.headers['x-request-id'];
+    const webhookSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+    
+    if (webhookSecret && xSignature) {
+      const parts = {};
+      xSignature.split(',').forEach(part => {
+        const [key, value] = part.trim().split('=');
+        parts[key] = value;
+      });
+      
+      const ts = parts['ts'];
+      const hash = parts['v1'];
+      const dataId = req.body?.data?.id;
+      
+      // Montar template conforme documentação do MP
+      const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+      const hmac = crypto.createHmac('sha256', webhookSecret).update(manifest).digest('hex');
+      
+      if (hmac !== hash) {
+        console.error('Webhook: assinatura inválida');
+        return res.status(401).send('Invalid signature');
+      }
+    } else if (webhookSecret) {
+      // Secret configurado mas request sem assinatura = rejeitar
+      console.error('Webhook: sem header x-signature');
+      return res.status(401).send('Missing signature');
+    } else {
+      // Sem secret configurado = rejeitar tudo (segurança)
+      console.error('Webhook: MERCADOPAGO_WEBHOOK_SECRET não configurado, rejeitando request');
+      return res.status(503).send('Webhook not configured');
+    }
+    
     const { type, data } = req.body;
     
     if (type === 'payment') {
@@ -1488,26 +1821,33 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
       const payment = new Payment(mercadopago);
       const paymentData = await payment.get({ id: paymentId });
       
-      // Buscar pedido pelo payment_id
+      // Buscar pedido pelo payment_id com tenant isolation
       const orderResult = await pool.query(
-        'SELECT id FROM orders WHERE payment_id = $1',
+        'SELECT id, tenant_id FROM orders WHERE payment_id = $1',
         [String(paymentId)]
       );
       
       if (orderResult.rows.length > 0) {
         const orderId = orderResult.rows[0].id;
-        await updateOrderStatus(pool, orderId, paymentData.status, 'webhook', `Webhook do Mercado Pago: ${paymentData.status_detail}`);
+        const tenantId = orderResult.rows[0].tenant_id;
+        await updateOrderStatus(pool, orderId, paymentData.status, 'webhook', `Webhook do Mercado Pago: ${paymentData.status_detail}`, tenantId);
       }
     }
     
     res.status(200).send('OK');
   } catch (err) {
     console.error('Webhook error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
+});
+
+// Error handler global
+app.use((err, req, res, next) => {
+  console.error('Erro não tratado:', err.message);
+  res.status(500).json({ error: 'Erro interno do servidor' });
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Backend rodando em http://localhost:${PORT}`);
+  console.log(`Backend rodando em http://localhost:${PORT}`);
 });

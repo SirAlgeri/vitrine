@@ -23,7 +23,9 @@ export const AdminOrderDetails: React.FC<AdminOrderDetailsProps> = ({ orderId, o
   }, [orderId]);
 
   const loadOrder = async () => {
-    const res = await fetch(`/api/orders/${orderId}`);
+    const token = localStorage.getItem('admin_token');
+    const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
+    const res = await fetch(`/api/orders/${orderId}`, { headers });
     const data = await res.json();
     setOrder(data);
     setFormData({
@@ -40,9 +42,10 @@ export const AdminOrderDetails: React.FC<AdminOrderDetailsProps> = ({ orderId, o
     }
 
     try {
+      const token = localStorage.getItem('admin_token');
       await fetch(`/api/orders/${orderId}/status`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           order_status: formData.order_status,
           tracking_code: formData.tracking_code,

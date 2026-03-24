@@ -1,7 +1,8 @@
-const API_URL = import.meta.env.PROD ? '/api' : '/api';
+import { Product, AppConfig } from '../types';
 
-// Helper para obter token
-const getAuthHeaders = () => {
+const API_URL = '/api';
+
+const getAuthHeaders = (): HeadersInit => {
   const token = localStorage.getItem('admin_token');
   return token ? {
     'Content-Type': 'application/json',
@@ -11,38 +12,44 @@ const getAuthHeaders = () => {
   };
 };
 
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
+    throw new Error(error.error || `Erro ${res.status}`);
+  }
+  return res.json();
+}
+
 export const api = {
-  // Config
-  getConfig: async () => {
+  getConfig: async (): Promise<Record<string, any>> => {
     const res = await fetch(`${API_URL}/config`);
-    return res.json();
+    return handleResponse(res);
+  },
+
+  getAdminConfig: async (): Promise<Record<string, any>> => {
+    const res = await fetch(`${API_URL}/config/admin`, { headers: getAuthHeaders() });
+    return handleResponse(res);
   },
   
-  updateConfig: async (config) => {
+  updateConfig: async (config: Partial<Record<string, any>>): Promise<Record<string, any>> => {
     const res = await fetch(`${API_URL}/config`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(config)
     });
-    if (!res.ok) throw new Error('Erro ao atualizar configuração');
-    return res.json();
+    return handleResponse(res);
   },
 
-  // Auth
-  login: async (username, password) => {
+  login: async (username: string, password: string) => {
     const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-    if (!res.ok) throw new Error('Login falhou');
-    const data = await res.json();
-    
-    // Salvar token
+    const data = await handleResponse<{ token?: string; success: boolean }>(res);
     if (data.token) {
       localStorage.setItem('admin_token', data.token);
     }
-    
     return data;
   },
   
@@ -50,19 +57,16 @@ export const api = {
     localStorage.removeItem('admin_token');
   },
 
-  // Products
-  getProducts: async () => {
-    // Admin: carrega todos os produtos
+  getProducts: async (): Promise<Product[]> => {
     const res = await fetch(`${API_URL}/products?all=true`);
-    return res.json();
+    return handleResponse(res);
   },
 
-  // Catálogo: carrega paginado
   getProductsPage: async (page = 1, limit = 24, search = '') => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit) });
     if (search) params.set('search', search);
     const res = await fetch(`${API_URL}/products?${params}`);
-    return res.json();
+    return handleResponse<{ products: Product[]; nextPage: number | null; total: number }>(res);
   },
 
   uploadImages: async (files: File[]): Promise<string[]> => {
@@ -74,47 +78,42 @@ export const api = {
       headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       body: formData
     });
-    if (!res.ok) throw new Error('Erro no upload');
-    const data = await res.json();
+    const data = await handleResponse<{ urls: string[] }>(res);
     return data.urls;
   },
 
-  createProduct: async (product) => {
+  createProduct: async (product: Partial<Product>): Promise<Product> => {
     const res = await fetch(`${API_URL}/products`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(product)
     });
-    if (!res.ok) throw new Error('Erro ao criar produto');
-    return res.json();
+    return handleResponse(res);
   },
 
-  updateProduct: async (id, product) => {
+  updateProduct: async (id: string, product: Partial<Product>): Promise<Product> => {
     const res = await fetch(`${API_URL}/products/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(product)
     });
-    if (!res.ok) throw new Error('Erro ao atualizar produto');
-    return res.json();
+    return handleResponse(res);
   },
 
-  deleteProduct: async (id) => {
+  deleteProduct: async (id: string) => {
     const res = await fetch(`${API_URL}/products/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
-    if (!res.ok) throw new Error('Erro ao deletar produto');
-    return res.json();
+    return handleResponse(res);
   },
 
-  // Orders
-  createOrder: async (order) => {
+  createOrder: async (order: Record<string, any>) => {
     const res = await fetch(`${API_URL}/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(order)
     });
-    return res.json();
+    return handleResponse(res);
   }
 };

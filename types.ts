@@ -2,6 +2,7 @@ export interface Product {
   id: string;
   name: string;
   price: number;
+  pix_price?: number;
   description: string;
   image: string; // Base64 string - primeira imagem
   images?: string[]; // Array de imagens (até 10)

@@ -17,7 +17,9 @@ export const OrderPaymentPage: React.FC = () => {
 
   const loadOrder = async () => {
     try {
-      const res = await fetch(`/api/orders/${orderId}`);
+      const token = localStorage.getItem('customerToken') || localStorage.getItem('admin_token');
+      const headers: HeadersInit = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch(`/api/orders/${orderId}`, { headers });
       const data = await res.json();
       
       if (data.payment_status !== 'pending' && data.payment_status !== 'PAYMENT_PENDING') {
@@ -40,9 +42,10 @@ export const OrderPaymentPage: React.FC = () => {
 
   const handleConfirmOrder = async () => {
     try {
+      const token = localStorage.getItem('customerToken') || localStorage.getItem('admin_token');
       await fetch(`/api/orders/${orderId}/payment`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           payment_id: paymentData.id,
           payment_status: paymentData.status,

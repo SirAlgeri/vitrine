@@ -46,13 +46,12 @@ const AppContent: React.FC = () => {
     try {
       const configData = await api.getConfig();
       if (configData.store_name) {
-        const newConfig = {
+        const newConfig: any = {
           storeName: configData.store_name,
           primaryColor: configData.primary_color,
           secondaryColor: configData.secondary_color,
           whatsappNumber: configData.whatsapp_number,
           logo_url: configData.logo_url,
-          markupPercentage: configData.markup_percentage || 0,
           cepOrigem: configData.cep_origem,
           enableOnlineCheckout: configData.enable_online_checkout ?? true,
           enableWhatsappCheckout: configData.enable_whatsapp_checkout ?? true,
@@ -70,6 +69,15 @@ const AppContent: React.FC = () => {
           button_secondary_hover_color: configData.button_secondary_hover_color
         };
         setConfig(newConfig);
+        
+        // Carregar markup apenas se admin autenticado
+        const token = localStorage.getItem('admin_token');
+        if (token) {
+          try {
+            const adminConfig = await api.getAdminConfig();
+            setConfig(prev => ({ ...prev, markupPercentage: adminConfig.markup_percentage || 0 }));
+          } catch {}
+        }
         
         // Aplicar cores personalizadas no CSS
         const root = document.documentElement;
@@ -98,8 +106,6 @@ const AppContent: React.FC = () => {
     } catch (err) {
       console.error('Erro ao carregar configuração');
     } finally {
-      // Delay de 1 segundo antes de mostrar o conteúdo
-      await new Promise(resolve => setTimeout(resolve, 1000));
       setIsConfigLoaded(true);
     }
   };
