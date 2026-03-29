@@ -58,7 +58,7 @@ export const api = {
   },
 
   getProducts: async (): Promise<Product[]> => {
-    const res = await fetch(`${API_URL}/products?all=true`);
+    const res = await fetch(`${API_URL}/products?all=true`, { headers: getAuthHeaders() });
     return handleResponse(res);
   },
 

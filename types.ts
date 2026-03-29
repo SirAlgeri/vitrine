@@ -18,7 +18,7 @@ export interface FieldDefinition {
   is_default: boolean;
   can_delete: boolean;
   field_order: number;
-  options?: string; // JSON string array for select type
+  options?: string | string[]; // array após parse do backend
 }
 
 export interface CartItem extends Product {
@@ -66,6 +66,7 @@ export interface AppConfig {
   button_primary_hover_color?: string;
   button_secondary_color?: string;
   button_secondary_hover_color?: string;
+  show_logo_only?: boolean;
 }
 
 export type ViewState = 'CATALOG' | 'ADMIN_DASHBOARD' | 'PRODUCT_FORM' | 'FIELD_MANAGER' | 'CUSTOMER_ACCOUNT' | 'AUTH';

@@ -22,7 +22,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onRemoveItem,
   onClearCart
 }) => {
-  const [step, setStep] = useState<'CART' | 'METHOD' | 'CHECKOUT' | 'SUCCESS'>('CART');
+  const [step, setStep] = useState<'CART' | 'METHOD' | 'CHECKOUT' | 'WHATSAPP_CONFIRM' | 'SUCCESS'>('CART');
   const [purchaseMethod, setPurchaseMethod] = useState<'WHATSAPP' | 'ONLINE' | null>(null);
   const [customer, setCustomer] = useState<CustomerInfo>({
     name: '',
@@ -211,6 +211,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             <h2 className="text-xl font-bold text-white">
               {step === 'CART' && 'Seu Carrinho'}
               {step === 'METHOD' && 'Forma de Compra'}
+              {step === 'WHATSAPP_CONFIRM' && 'Comprar via WhatsApp'}
               {step === 'CHECKOUT' && 'Finalizar Compra'}
               {step === 'SUCCESS' && 'Pedido Realizado'}
             </h2>
@@ -292,7 +293,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               )}
 
               {/* Cálculo de Frete */}
-              {cart.length > 0 && (
+              {cart.length > 0 && config.enableOnlineCheckout !== false && (
                 <div className="mt-4 p-4 bg-slate-800 rounded-lg border border-slate-700">
                   <div className="flex items-center gap-2 mb-3">
                     <Truck className="w-4 h-4 text-primary" />
@@ -425,7 +426,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <button
                 onClick={() => {
                   setPurchaseMethod('WHATSAPP');
-                  handleWhatsAppCheckout();
+                  setStep('WHATSAPP_CONFIRM');
                 }}
                 className="w-full p-5 bg-custom-btn-secondary rounded-xl text-white font-medium flex items-center gap-4 transition-all border border-custom"
               >
@@ -437,6 +438,36 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <ArrowRight className="w-5 h-5 flex-shrink-0" />
               </button>
               )}
+            </div>
+          )}
+
+          {/* STEP: WHATSAPP CONFIRM */}
+          {step === 'WHATSAPP_CONFIRM' && (
+            <div className="h-full flex flex-col items-center justify-center text-center space-y-6 animate-scale-up">
+              <div className="w-24 h-24 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400 mb-2">
+                <MessageCircle className="w-12 h-12" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-white mb-2">Finalizar pelo WhatsApp</h3>
+                <p className="text-slate-400 max-w-xs mx-auto">
+                  Você será encaminhado para o WhatsApp para finalizar sua compra diretamente com o fornecedor.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  handleWhatsAppCheckout();
+                }}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg shadow-emerald-900/20 transition-all w-full justify-center"
+              >
+                <MessageCircle className="w-6 h-6" />
+                Confirmar e abrir WhatsApp
+              </button>
+              <button
+                onClick={() => setStep('METHOD')}
+                className="text-slate-500 hover:text-white transition-colors"
+              >
+                Voltar
+              </button>
             </div>
           )}
 
@@ -480,7 +511,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         </div>
 
         {/* Footer Actions */}
-        {step !== 'SUCCESS' && cart.length > 0 && (
+        {step !== 'SUCCESS' && step !== 'WHATSAPP_CONFIRM' && cart.length > 0 && (
           <div className="p-5 border-t border-custom bg-custom-card backdrop-blur-sm">
             
             {/* Resumo da Compra */}
@@ -540,10 +571,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     window.location.href = '/checkout';
                     return;
                   }
-                  // Se só whatsapp, vai direto
+                  // Se só whatsapp, vai para confirmação
                   if (whatsappEnabled && !onlineEnabled) {
                     setPurchaseMethod('WHATSAPP');
-                    handleWhatsAppCheckout();
+                    setStep('WHATSAPP_CONFIRM');
                     return;
                   }
                   // Se ambos, mostra seleção

@@ -154,7 +154,7 @@ export async function updateOrderStatusManual(pool, orderId, newOrderStatus, cha
     await client.query(
       `UPDATE orders 
        SET order_status = $1, updated_at = CURRENT_TIMESTAMP
-       ${whereClause}`,
+       WHERE id = $2${tenantId ? ' AND tenant_id = $3' : ''}`,
       tenantId ? [newOrderStatus, orderId, tenantId] : [newOrderStatus, orderId]
     );
     

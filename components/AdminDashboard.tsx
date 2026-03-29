@@ -195,6 +195,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            <div className="md:col-span-2 border border-slate-700 rounded-lg p-4 bg-slate-900/50">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={tempConfig.show_logo_only || false}
+                  onChange={(e) => setTempConfig({...tempConfig, show_logo_only: e.target.checked})}
+                  className="w-5 h-5 rounded border-slate-600 text-primary focus:ring-primary focus:ring-offset-slate-900"
+                />
+                <div>
+                  <span className="text-sm font-medium text-white">Exibir apenas o logo no header</span>
+                  <p className="text-xs text-slate-500">Oculta o nome da loja e exibe o logo maior</p>
+                </div>
+              </label>
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate-400 mb-2">WhatsApp</label>
               <input

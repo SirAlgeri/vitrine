@@ -10,6 +10,7 @@ interface ManualOrderFormProps {
 export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSave }) => {
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [productSearch, setProductSearch] = useState<string[]>([]);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [newCustomer, setNewCustomer] = useState({
     nome_completo: '',
@@ -43,15 +44,17 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
   }, []);
 
   const loadCustomers = async () => {
-    const res = await fetch('/api/customers');
+    const token = localStorage.getItem('admin_token');
+    const res = await fetch('/api/customers', { headers: { 'Authorization': `Bearer ${token}` } });
     const data = await res.json();
     setCustomers(data);
   };
 
   const loadProducts = async () => {
-    const res = await fetch('/api/products');
+    const token = localStorage.getItem('admin_token');
+    const res = await fetch('/api/products?all=true', { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
     const data = await res.json();
-    setProducts(data);
+    setProducts(Array.isArray(data) ? data : (data.products || []));
   };
 
   const handleCustomerChange = (customerId: string) => {
@@ -79,21 +82,30 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
     }
   };
 
+  const [customerError, setCustomerError] = useState('');
+
   const createCustomer = async () => {
+    setCustomerError('');
     try {
+      const token = localStorage.getItem('admin_token');
       const res = await fetch('/api/customers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(newCustomer)
       });
-      const customer = await res.json();
-      
-      // Montar endereço completo se houver dados
+      const data = await res.json();
+
+      if (!res.ok) {
+        setCustomerError(data.error || 'Erro ao criar cliente');
+        return;
+      }
+
+      const customer = data;
       let address = '';
       if (customer.endereco) {
         address = `${customer.endereco}${customer.numero ? ', ' + customer.numero : ''}${customer.complemento ? ' - ' + customer.complemento : ''}${customer.bairro ? ' - ' + customer.bairro : ''}${customer.cidade ? ', ' + customer.cidade : ''}${customer.estado ? '/' + customer.estado : ''}`;
       }
-      
+
       setFormData({
         ...formData,
         customer_id: customer.id,
@@ -101,25 +113,13 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
         customer_phone: customer.telefone || '',
         customer_address: address
       });
-      
+
       await loadCustomers();
       setShowNewCustomer(false);
-      setNewCustomer({
-        nome_completo: '',
-        telefone: '',
-        cpf: '',
-        email: '',
-        cep: '',
-        endereco: '',
-        numero: '',
-        complemento: '',
-        bairro: '',
-        cidade: '',
-        estado: ''
-      });
+      setCustomerError('');
+      setNewCustomer({ nome_completo: '', telefone: '', cpf: '', email: '', cep: '', endereco: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '' });
     } catch (err) {
-      console.error(err);
-      alert('Erro ao criar cliente');
+      setCustomerError('Erro ao criar cliente');
     }
   };
 
@@ -167,9 +167,12 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
     setFormData({ ...formData, items: newItems, total });
   };
 
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const token = localStorage.getItem('admin_token');
       const response = await fetch('/api/orders', {
@@ -184,17 +187,19 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
           created_at: formData.purchase_date + 'T00:00:00'
         })
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Erro ao criar pedido');
       }
-      
+
       onSave();
       onClose();
     } catch (err: any) {
       console.error(err);
       alert(err.message || 'Erro ao criar pedido');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -337,6 +342,9 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
                   />
                 </div>
                 <div className="flex gap-2">
+                  {customerError && (
+                    <p className="w-full text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded px-3 py-2 mb-1">{customerError}</p>
+                  )}
                   <button
                     type="button"
                     onClick={createCustomer}
@@ -411,20 +419,46 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
               {formData.items.map((item, index) => (
                 <div key={index} className="bg-slate-700 p-3 rounded-lg space-y-2">
                   <div className="flex gap-2">
-                    <div className="flex-1">
+                    <div className="flex-1 relative">
                       <input
                         required
-                        list={`products-${index}`}
-                        value={item.product_name || ''}
-                        onChange={(e) => updateItem(index, 'product_id', e.target.value)}
-                        placeholder="Digite para buscar produto..."
+                        value={item.product_name || productSearch[index] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const s = [...productSearch];
+                          s[index] = val;
+                          setProductSearch(s);
+                          // limpa seleção se apagar
+                          if (!val) updateItem(index, 'product_id', '');
+                        }}
+                        placeholder="Buscar por nome ou ID..."
                         className="w-full px-3 py-2 bg-slate-600 text-white rounded border border-slate-500 focus:outline-none focus:border-primary"
                       />
-                      <datalist id={`products-${index}`}>
-                        {products.map(p => (
-                          <option key={p.id} value={p.name}>ID: {p.id} - {p.name} - R$ {p.price}</option>
-                        ))}
-                      </datalist>
+                      {productSearch[index] && !item.product_id && (() => {
+                        const term = productSearch[index].toLowerCase();
+                        const filtered = products.filter(p =>
+                          p.name.toLowerCase().includes(term) || String(p.id).includes(term)
+                        ).slice(0, 8);
+                        return filtered.length > 0 ? (
+                          <div className="absolute z-10 w-full bg-slate-800 border border-slate-600 rounded mt-1 max-h-48 overflow-y-auto">
+                            {filtered.map(p => (
+                              <div
+                                key={p.id}
+                                className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm text-white"
+                                onMouseDown={() => {
+                                  updateItem(index, 'product_id', p.name);
+                                  const s = [...productSearch];
+                                  s[index] = '';
+                                  setProductSearch(s);
+                                }}
+                              >
+                                <span className="text-slate-400 text-xs mr-2">#{p.id}</span>
+                                {p.name} — <span className="text-green-400">R$ {parseFloat(p.price).toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                     <button
                       type="button"
@@ -541,10 +575,10 @@ export const ManualOrderForm: React.FC<ManualOrderFormProps> = ({ onClose, onSav
             </button>
             <button
               type="submit"
-              disabled={formData.items.length === 0 || !formData.customer_id}
+              disabled={formData.items.length === 0 || !formData.customer_id || submitting}
               className="px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Criar Pedido
+              {submitting ? 'Criando...' : 'Criar Pedido'}
             </button>
           </div>
         </form>

@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ChevronLeft } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X } from 'lucide-react';
 import { FieldDefinition } from '../types';
+
+const authHeaders = () => {
+  const token = localStorage.getItem('admin_token');
+  return { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
+};
 
 interface FieldManagerProps {
   onBack: () => void;
@@ -14,6 +19,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
     options: [] as string[]
   });
   const [optionInput, setOptionInput] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState<'text' | 'number' | 'currency' | 'select'>('text');
+  const [editOptions, setEditOptions] = useState<string[]>([]);
+  const [editOptionInput, setEditOptionInput] = useState('');
 
   useEffect(() => {
     loadFields();
@@ -37,7 +47,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
     
     await fetch('/api/field-definitions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify({
         id: crypto.randomUUID(),
         field_name: newField.name,
@@ -49,6 +59,25 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
     setNewField({ name: '', type: 'text', options: [] });
     setOptionInput('');
     loadFields();
+  };
+
+  const saveEdit = async (field: FieldDefinition) => {
+    if (!editName.trim()) return;
+    if (editType === 'select' && editOptions.length === 0) {
+      alert('Adicione pelo menos uma opção');
+      return;
+    }
+    const res = await fetch(`/api/field-definitions/${field.id}`, {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        field_name: editName,
+        field_type: editType,
+        options: editType === 'select' ? JSON.stringify(editOptions) : null
+      })
+    });
+    if (res.ok) { setEditingId(null); loadFields(); }
+    else alert('Erro ao editar campo');
   };
 
   const addOption = () => {
@@ -64,7 +93,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
 
   const deleteField = async (id: string) => {
     if (!confirm('Deletar campo?')) return;
-    const res = await fetch(`/api/field-definitions/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/field-definitions/${id}`, { method: 'DELETE', headers: authHeaders() });
     if (res.ok) loadFields();
     else alert('Este campo não pode ser deletado');
   };
@@ -120,11 +149,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
                   placeholder="Digite uma opção (ex: Nike)"
                   className="flex-1 px-3 py-2 bg-slate-600 text-white rounded border border-slate-500 focus:outline-none focus:border-primary"
                 />
-                <button
-                  type="button"
-                  onClick={addOption}
-                  className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded"
-                >
+                <button type="button" onClick={addOption} className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded">
                   Adicionar
                 </button>
               </div>
@@ -134,13 +159,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
                   {newField.options.map((option, index) => (
                     <div key={index} className="flex items-center gap-1 px-3 py-1 bg-slate-600 rounded-full text-sm text-white">
                       <span>{option}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeOption(index)}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        ×
-                      </button>
+                      <button type="button" onClick={() => removeOption(index)} className="text-red-400 hover:text-red-300">×</button>
                     </div>
                   ))}
                 </div>
@@ -160,10 +179,53 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
         <div className="space-y-3">
           {fields.map(field => (
             <div key={field.id} className="p-4 bg-slate-800 rounded-lg border border-slate-700">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex-1">
-                  <div className="text-white font-medium">{field.field_name}</div>
-                  <div className="text-slate-400 text-sm">
+                  {editingId === field.id ? (
+                    <div className="space-y-2">
+                      <input
+                        autoFocus
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-slate-700 text-white rounded border border-primary focus:outline-none text-sm"
+                      />
+                      <select
+                        value={editType}
+                        onChange={(e) => { setEditType(e.target.value as any); setEditOptions([]); }}
+                        className="w-full px-3 py-1.5 bg-slate-700 text-white rounded border border-slate-600 focus:outline-none text-sm"
+                      >
+                        <option value="text">Texto</option>
+                        <option value="number">Número</option>
+                        <option value="currency">Valor (R$)</option>
+                        <option value="select">Seleção</option>
+                      </select>
+                      {editType === 'select' && (
+                        <div className="space-y-2 p-3 bg-slate-700 rounded">
+                          <div className="flex gap-2">
+                            <input
+                              value={editOptionInput}
+                              onChange={(e) => setEditOptionInput(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (editOptionInput.trim()) { setEditOptions([...editOptions, editOptionInput.trim()]); setEditOptionInput(''); } } }}
+                              placeholder="Nova opção"
+                              className="flex-1 px-2 py-1 bg-slate-600 text-white rounded border border-slate-500 focus:outline-none text-sm"
+                            />
+                            <button type="button" onClick={() => { if (editOptionInput.trim()) { setEditOptions([...editOptions, editOptionInput.trim()]); setEditOptionInput(''); } }} className="px-3 py-1 bg-primary text-white rounded text-sm">+</button>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {editOptions.map((opt, i) => (
+                              <span key={i} className="flex items-center gap-1 px-2 py-0.5 bg-slate-600 rounded-full text-xs text-white">
+                                {opt}
+                                <button onClick={() => setEditOptions(editOptions.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-300">×</button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-white font-medium">{field.field_name}</div>
+                  )}
+                  <div className="text-slate-400 text-sm mt-0.5">
                     {field.field_type === 'text' && 'Texto'}
                     {field.field_type === 'number' && 'Número'}
                     {field.field_type === 'currency' && 'Valor (R$)'}
@@ -173,20 +235,31 @@ export const FieldManager: React.FC<FieldManagerProps> = ({ onBack }) => {
                   {field.field_type === 'select' && field.options && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {field.options.map((opt: string, i: number) => (
-                        <span key={i} className="px-2 py-1 bg-slate-700 rounded text-xs text-slate-300">
-                          {opt}
-                        </span>
+                        <span key={i} className="px-2 py-1 bg-slate-700 rounded text-xs text-slate-300">{opt}</span>
                       ))}
                     </div>
                   )}
                 </div>
                 {field.can_delete && (
-                  <button
-                    onClick={() => deleteField(field.id)}
-                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {editingId === field.id ? (
+                      <>
+                        <button onClick={() => saveEdit(field)} className="p-2 text-green-400 hover:text-green-300 hover:bg-green-400/10 rounded-lg transition-colors">
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setEditingId(null)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => { setEditingId(field.id); setEditName(field.field_name); setEditType(field.field_type as any); const opts = Array.isArray(field.options) ? field.options : (typeof field.options === 'string' ? JSON.parse(field.options) : []); setEditOptions(opts); setEditOptionInput(''); }} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button onClick={() => deleteField(field.id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

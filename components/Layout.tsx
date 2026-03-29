@@ -43,19 +43,29 @@ export const Layout: React.FC<LayoutProps> = ({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-lg shadow-primary/30 overflow-hidden">
-              {config.logo_url ? (
-                <img src={config.logo_url} alt={config.storeName} className="w-full h-full object-cover" />
+            {config.show_logo_only ? (
+              config.logo_url ? (
+                <img src={config.logo_url} alt={config.storeName} className="h-10 w-auto object-contain" />
               ) : (
-                <ShoppingBag className="text-white w-5 h-5" />
-              )}
-            </div>
-            <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent hidden sm:block">
-              {config.storeName}
-            </h1>
-            <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent sm:hidden">
-              {config.storeName.slice(0, 10)}{config.storeName.length > 10 ? '...' : ''}
-            </h1>
+                <ShoppingBag className="text-white w-8 h-8" />
+              )
+            ) : (
+              <>
+                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shadow-lg shadow-primary/30 overflow-hidden">
+                  {config.logo_url ? (
+                    <img src={config.logo_url} alt={config.storeName} className="w-full h-full object-cover" />
+                  ) : (
+                    <ShoppingBag className="text-white w-5 h-5" />
+                  )}
+                </div>
+                <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent hidden sm:block">
+                  {config.storeName}
+                </h1>
+                <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent sm:hidden">
+                  {config.storeName.slice(0, 10)}{config.storeName.length > 10 ? '...' : ''}
+                </h1>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">

@@ -12,3 +12,4 @@ backend/.env.local
 vitrinepro_prod.sql
 *.bak
 **/.env.backup
+backend/*.mjs

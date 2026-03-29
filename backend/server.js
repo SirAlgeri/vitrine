@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import https from 'https';
 import http from 'http';
+import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
 import bcrypt from 'bcrypt';
 import { MercadoPagoConfig, Payment, Preference } from 'mercadopago';
@@ -176,6 +177,7 @@ app.get('/api/config', async (req, res) => {
       button_primary_hover_color: row.button_primary_hover_color,
       button_secondary_color: row.button_secondary_color,
       button_secondary_hover_color: row.button_secondary_hover_color,
+      show_logo_only: row.show_logo_only || false,
     };
     
     res.json(config);
@@ -189,7 +191,16 @@ app.get('/api/config/admin', authenticateAdmin, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM config WHERE tenant_id = $1 LIMIT 1', [req.tenant.id]);
     const row = result.rows[0] || {};
-    res.json({ markup_percentage: row.markup_percentage || 0 });
+    res.json({
+      markup_percentage: row.markup_percentage || 0,
+      smtp_host: row.smtp_host || '',
+      smtp_port: row.smtp_port || 587,
+      smtp_secure: row.smtp_secure || false,
+      smtp_user: row.smtp_user || '',
+      smtp_pass: row.smtp_pass || '',
+      smtp_from: row.smtp_from || '',
+      smtp_from_name: row.smtp_from_name || '',
+    });
   } catch (err) {
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
@@ -360,6 +371,12 @@ app.put('/api/config', authenticateAdmin, [
     if (button_secondary_hover_color !== undefined) {
       updates.push(`button_secondary_hover_color = $${paramCount++}`);
       values.push(button_secondary_hover_color);
+    }
+    
+    const { show_logo_only } = req.body;
+    if (show_logo_only !== undefined) {
+      updates.push(`show_logo_only = $${paramCount++}`);
+      values.push(show_logo_only);
     }
     
     if (updates.length === 0) {
@@ -640,14 +657,21 @@ app.get('/api/customers', authenticateAdmin, async (req, res) => {
 app.post('/api/customers', authenticateAdmin, async (req, res) => {
   try {
     const { nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado } = req.body;
-    
+
+    if (email) {
+      const existing = await pool.query('SELECT id FROM customers WHERE email = $1 AND tenant_id = $2', [email, req.tenant.id]);
+      if (existing.rows.length > 0) {
+        return res.status(400).json({ error: 'Já existe um cliente cadastrado com este email' });
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO customers (id, nome_completo, telefone, cpf, email, cep, endereco, numero, complemento, bairro, cidade, estado, status, senha_hash, tenant_id)
        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'ativo', '', $12)
        RETURNING id, nome_completo, email, telefone, cpf, cep, endereco, numero, complemento, bairro, cidade, estado`,
       [nome_completo, telefone || '', cpf || null, email || null, cep || null, endereco || null, numero || null, complemento || null, bairro || null, cidade || null, estado || null, req.tenant.id]
     );
-    
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('Erro ao criar cliente:', err);
@@ -816,27 +840,32 @@ app.put('/api/addresses/:id', authenticateCustomer, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    const { nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, customer_id } = req.body;
-    
-    // Verificar que o endereço pertence ao customer autenticado
-    if (customer_id && req.customer.id !== customer_id) {
+
+    // Verificar ownership pelo banco (não confiar no body)
+    const check = await client.query(
+      'SELECT customer_id FROM customer_addresses WHERE id = $1 AND tenant_id = $2',
+      [req.params.id, req.tenant.id]
+    );
+    if (check.rows.length === 0 || check.rows[0].customer_id !== req.customer.id) {
+      await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Acesso negado' });
     }
-    
-    if (is_default && customer_id) {
+
+    const { nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default } = req.body;
+
+    if (is_default) {
       await client.query(
         'UPDATE customer_addresses SET is_default = false WHERE customer_id = $1 AND tenant_id = $2',
-        [customer_id, req.tenant.id]
+        [req.customer.id, req.tenant.id]
       );
     }
-    
+
     const result = await client.query(
       `UPDATE customer_addresses SET nome_endereco = $1, cep = $2, rua = $3, numero = $4, complemento = $5, bairro = $6, cidade = $7, estado = $8, is_default = $9
        WHERE id = $10 AND tenant_id = $11 RETURNING id, customer_id, nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default`,
       [nome_endereco, cep, rua, numero, complemento, bairro, cidade, estado, is_default, req.params.id, req.tenant.id]
     );
-    
+
     await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (err) {
@@ -885,10 +914,19 @@ app.get('/api/products', async (req, res) => {
 
     if (all) {
       // Exigir autenticação de admin para ver preços de custo
-      const authPassed = await new Promise(resolve => {
-        authenticateAdmin(req, { status: () => ({ json: () => resolve(false) }) }, () => resolve(true));
-      });
-      if (!authPassed) return res.status(401).json({ error: 'Autenticação de admin necessária' });
+      // Verificar autenticação de admin inline
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Autenticação de admin necessária' });
+      }
+      try {
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+        if (req.tenant && decoded.tenant_id !== req.tenant.id) {
+          return res.status(403).json({ error: 'Acesso negado' });
+        }
+      } catch {
+        return res.status(401).json({ error: 'Token inválido' });
+      }
 
       // Admin: carrega todos (comportamento original)
       const productsResult = await client.query(
@@ -1267,15 +1305,17 @@ app.post('/api/field-definitions', authenticateAdmin, async (req, res) => {
 
 app.put('/api/field-definitions/:id', authenticateAdmin, async (req, res) => {
   try {
-    const { field_name, field_type } = req.body;
+    const { field_name, field_type, options } = req.body;
     const result = await pool.query(
-      'UPDATE field_definitions SET field_name = $1, field_type = $2 WHERE id = $3 AND can_delete = true AND tenant_id = $4 RETURNING *',
-      [field_name, field_type, req.params.id, req.tenant.id]
+      'UPDATE field_definitions SET field_name = $1, field_type = $2, options = $3 WHERE id = $4 AND can_delete = true AND tenant_id = $5 RETURNING *',
+      [field_name, field_type, options ?? null, req.params.id, req.tenant.id]
     );
     if (result.rows.length === 0) {
       return res.status(403).json({ error: 'Campo não pode ser editado' });
     }
-    res.json(result.rows[0]);
+    const row = result.rows[0];
+    row.options = row.options ? JSON.parse(row.options) : null;
+    res.json(row);
   } catch (err) {
     console.error('Erro ao atualizar campo:', err);
     res.status(500).json({ error: 'Erro ao atualizar campo' });
@@ -1324,7 +1364,11 @@ app.post('/api/orders', authenticateAny, [
     // Se vier com status customizado (registro manual), usar ele. Senão, mapear do gateway
     let payment_status, order_status;
     if (customPaymentStatus && customOrderStatus) {
-      // Registro manual - usar status enviados
+      // Registro manual — apenas admin pode definir status arbitrário
+      if (!req.user) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Apenas admin pode definir status manual' });
+      }
       payment_status = customPaymentStatus;
       order_status = customOrderStatus;
     } else {
@@ -1710,7 +1754,8 @@ app.put('/api/orders/:id/status', authenticateAdmin, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('Erro ao atualizar status:', err);
-    res.status(400).json({ error: 'Erro ao processar requisição' });
+    const isBusinessError = err.message?.startsWith('Não é possível') || err.message === 'Pedido não encontrado';
+    res.status(isBusinessError ? 400 : 500).json({ error: err.message || 'Erro ao processar requisição' });
   }
 });
 

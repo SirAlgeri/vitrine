@@ -66,7 +66,8 @@ const AppContent: React.FC = () => {
           button_primary_color: configData.button_primary_color,
           button_primary_hover_color: configData.button_primary_hover_color,
           button_secondary_color: configData.button_secondary_color,
-          button_secondary_hover_color: configData.button_secondary_hover_color
+          button_secondary_hover_color: configData.button_secondary_hover_color,
+          show_logo_only: configData.show_logo_only || false,
         };
         setConfig(newConfig);
         
@@ -196,7 +197,8 @@ const AppContent: React.FC = () => {
         button_primary_color: newConfig.button_primary_color,
         button_primary_hover_color: newConfig.button_primary_hover_color,
         button_secondary_color: newConfig.button_secondary_color,
-        button_secondary_hover_color: newConfig.button_secondary_hover_color
+        button_secondary_hover_color: newConfig.button_secondary_hover_color,
+        show_logo_only: newConfig.show_logo_only,
       });
       setConfig(newConfig);
     } catch (err) {

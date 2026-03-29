@@ -25,7 +25,10 @@ export default function SmtpSettings({ onBack }: SmtpSettingsProps) {
 
   const loadConfig = async () => {
     try {
-      const res = await fetch('/api/config');
+      const token = localStorage.getItem('admin_token');
+      const res = await fetch('/api/config/admin', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await res.json();
       if (data) {
         setConfig({
@@ -45,11 +48,11 @@ export default function SmtpSettings({ onBack }: SmtpSettingsProps) {
 
   const handleSave = async () => {
     setSaving(true);
-
     try {
+      const token = localStorage.getItem('admin_token');
       const res = await fetch('/api/config', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(config),
       });
 
