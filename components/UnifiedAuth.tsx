@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Mail, Lock, Shield } from 'lucide-react';
+import { ChevronLeft, Mail, Lock, Shield, Eye, EyeOff } from 'lucide-react';
 import { CustomerRegister } from '../types';
 import { customerAuth } from '../services/customerAuth';
 import { api } from '../services/api';
@@ -26,6 +26,7 @@ export const UnifiedAuth: React.FC<UnifiedAuthProps> = ({ onBack, onCustomerSucc
     aceita_marketing: false
   });
   const [confirmSenha, setConfirmSenha] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,13 +216,16 @@ export const UnifiedAuth: React.FC<UnifiedAuthProps> = ({ onBack, onCustomerSucc
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={loginData.senha}
                   onChange={(e) => setLoginData({ ...loginData, senha: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-primary"
+                  className="w-full pl-10 pr-10 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-primary"
                 />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -273,28 +277,38 @@ export const UnifiedAuth: React.FC<UnifiedAuthProps> = ({ onBack, onCustomerSucc
 
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">Senha</label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={registerData.senha}
-                onChange={(e) => setRegisterData({ ...registerData, senha: e.target.value })}
-                placeholder="Mínimo 6 caracteres"
-                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-primary"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  value={registerData.senha}
+                  onChange={(e) => setRegisterData({ ...registerData, senha: e.target.value })}
+                  placeholder="Mínimo 6 caracteres"
+                  className="w-full px-4 pr-10 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-primary"
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">Confirmar Senha</label>
-              <input
-                type="password"
-                required
-                minLength={6}
-                value={confirmSenha}
-                onChange={(e) => setConfirmSenha(e.target.value)}
-                placeholder="Digite a senha novamente"
-                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-primary"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  minLength={6}
+                  value={confirmSenha}
+                  onChange={(e) => setConfirmSenha(e.target.value)}
+                  placeholder="Digite a senha novamente"
+                  className="w-full px-4 pr-10 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-primary"
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <button

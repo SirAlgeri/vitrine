@@ -146,7 +146,8 @@ const AppContent: React.FC = () => {
     setCart(prev => {
       const newCart = prev.map(item => {
         if (item.id === id) {
-          return { ...item, quantity: Math.max(1, item.quantity + delta) };
+          const max = item.stock_quantity ?? Infinity;
+          return { ...item, quantity: Math.min(Math.max(1, item.quantity + delta), max) };
         }
         return item;
       });
