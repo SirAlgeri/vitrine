@@ -988,7 +988,7 @@ app.get('/api/products', async (req, res) => {
         FROM products p
         LEFT JOIN product_fields pf ON pf.product_id = p.id AND pf.tenant_id = p.tenant_id
         WHERE p.tenant_id = $1 AND (LOWER(p.name) LIKE $2 OR LOWER(p.description) LIKE $2 OR LOWER(pf.value) LIKE $2)
-        ORDER BY p.updated_at DESC
+        ORDER BY CASE WHEN p.stock_quantity = 0 THEN 1 ELSE 0 END, p.updated_at DESC
         LIMIT $3 OFFSET $4
       `;
       productsParams = [req.tenant.id, searchTerm, limit, offset];
@@ -1004,7 +1004,7 @@ app.get('/api/products', async (req, res) => {
         SELECT p.id, p.name, p.price, p.description, p.image, p.stock_quantity
         FROM products p
         WHERE p.tenant_id = $1
-        ORDER BY p.updated_at DESC
+        ORDER BY CASE WHEN p.stock_quantity = 0 THEN 1 ELSE 0 END, p.updated_at DESC
         LIMIT $2 OFFSET $3
       `;
       productsParams = [req.tenant.id, limit, offset];
