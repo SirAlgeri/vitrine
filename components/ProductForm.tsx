@@ -62,6 +62,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ initialProduct, onSave
       alert('Erro ao fazer upload da imagem. Tente novamente.');
     } finally {
       setIsProcessingImg(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
