@@ -977,17 +977,20 @@ app.get('/api/products', async (req, res) => {
       countQuery = `
         SELECT COUNT(DISTINCT p.id) FROM products p
         LEFT JOIN product_fields pf ON pf.product_id = p.id AND pf.tenant_id = p.tenant_id
-        WHERE p.tenant_id = $1 AND (LOWER(p.name) LIKE $2 OR LOWER(p.description) LIKE $2 OR LOWER(pf.value) LIKE $2)
+        WHERE p.tenant_id = $1 AND (LOWER(p.name) LIKE $2 OR LOWER(COALESCE(p.description, '')) LIKE $2 OR LOWER(COALESCE(pf.value, '')) LIKE $2)
       `;
       countParams = [req.tenant.id, searchTerm];
       const countResult = await client.query(countQuery, countParams);
       const totalCount = parseInt(countResult.rows[0].count);
 
       productsQuery = `
-        SELECT DISTINCT p.id, p.name, p.price, p.description, p.image, p.stock_quantity, p.updated_at
+        SELECT p.id, p.name, p.price, p.description, p.image, p.stock_quantity, p.updated_at
         FROM products p
-        LEFT JOIN product_fields pf ON pf.product_id = p.id AND pf.tenant_id = p.tenant_id
-        WHERE p.tenant_id = $1 AND (LOWER(p.name) LIKE $2 OR LOWER(p.description) LIKE $2 OR LOWER(pf.value) LIKE $2)
+        WHERE p.tenant_id = $1 AND p.id IN (
+          SELECT DISTINCT p2.id FROM products p2
+          LEFT JOIN product_fields pf ON pf.product_id = p2.id AND pf.tenant_id = p2.tenant_id
+          WHERE p2.tenant_id = $1 AND (LOWER(p2.name) LIKE $2 OR LOWER(COALESCE(p2.description, '')) LIKE $2 OR LOWER(COALESCE(pf.value, '')) LIKE $2)
+        )
         ORDER BY CASE WHEN p.stock_quantity = 0 THEN 1 ELSE 0 END, p.updated_at DESC
         LIMIT $3 OFFSET $4
       `;
@@ -1055,6 +1058,7 @@ app.get('/api/products', async (req, res) => {
       total: totalCountFinal
     });
   } catch (err) {
+    console.error('Erro ao buscar produtos:', err);
     res.status(500).json({ error: 'Erro interno do servidor' });
   } finally {
     client.release();
