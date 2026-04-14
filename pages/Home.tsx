@@ -4,7 +4,53 @@ import { ProductCard } from '../components/ProductCard';
 import { ProductModal } from '../components/ProductModal';
 import { useInfiniteProducts } from '../hooks/useInfiniteProducts';
 import { Product, AppConfig, FieldDefinition } from '../types';
-import { Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
+import { Search, SlidersHorizontal, X, Loader2, ChevronDown } from 'lucide-react';
+
+const MultiSelectDropdown: React.FC<{
+  options: string[];
+  selected: string[];
+  label: string;
+  onToggle: (value: string) => void;
+}> = ({ options, selected, label, onToggle }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:border-primary text-sm"
+      >
+        <span className="truncate text-left">{label}</span>
+        <ChevronDown className={`w-4 h-4 ml-2 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-slate-700 border border-slate-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {[...options].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).map(option => (
+            <label key={option} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selected.includes(option)}
+                onChange={() => onToggle(option)}
+                className="accent-primary w-4 h-4 shrink-0"
+              />
+              <span className="text-sm text-slate-200">{option}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface HomeProps {
   config: AppConfig;
@@ -177,26 +223,17 @@ export const Home: React.FC<HomeProps> = ({ config, onAddToCart }) => {
                 {/* Filtros de Campos Select */}
                 {fields.map(field => {
                   const options = field.options || [];
+                  const selected = selectedFilters[field.id] || [];
+                  const label = selected.length === 0 ? 'Todos' : selected.join(', ');
                   return (
-                    <div key={field.id}>
+                    <div key={field.id} className="relative">
                       <label className="block text-sm font-medium text-slate-400 mb-2">{field.field_name}</label>
-                      <select
-                        value={selectedFilters[field.id]?.[0] || ''}
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            setSelectedFilters({ ...selectedFilters, [field.id]: [e.target.value] });
-                          } else {
-                            const { [field.id]: _, ...rest } = selectedFilters;
-                            setSelectedFilters(rest);
-                          }
-                        }}
-                        className="w-full px-3 py-2 bg-slate-700 text-white rounded-lg border border-slate-600 focus:outline-none focus:border-primary"
-                      >
-                        <option value="">Todos</option>
-                        {options.map((option: string) => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                      </select>
+                      <MultiSelectDropdown
+                        options={options}
+                        selected={selected}
+                        label={label}
+                        onToggle={(value) => toggleFilter(field.id, value)}
+                      />
                     </div>
                   );
                 })}
