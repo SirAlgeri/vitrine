@@ -1,47 +1,40 @@
-# Vitrine Pro - E-commerce System
+# Vitrine Pro
 
-Sistema completo de e-commerce com integração Mercado Pago, cálculo de frete, gestão de pedidos e painel administrativo.
+E-commerce multi-tenant com integração Mercado Pago, cálculo de frete, gestão de pedidos e painel administrativo.
 
 ## Funcionalidades
 
-- ✅ Catálogo de produtos com busca e filtros
-- ✅ Carrinho de compras
-- ✅ **Cálculo de frete (PAC/SEDEX) via microserviço**
-- ✅ Checkout com múltiplas formas de pagamento (PIX, Cartão, Boleto)
-- ✅ Integração completa com Mercado Pago
-- ✅ Sistema de margem/markup com desconto PIX
-- ✅ Sistema de status padronizado (pagamento + pedido)
-- ✅ Painel administrativo completo
-- ✅ Registro manual de pedidos
-- ✅ Gestão de clientes
-- ✅ Histórico de status dos pedidos
-- ✅ Rastreamento de entregas
-- ✅ Conta do cliente com histórico de pedidos
-- ✅ Responsivo para mobile
+- Catálogo de produtos com busca e filtros
+- Carrinho de compras com cálculo de frete (PAC/SEDEX)
+- Checkout com PIX, Cartão e Boleto via Mercado Pago
+- Sistema de margem/markup com desconto PIX automático
+- Painel administrativo completo
+- Registro manual de pedidos
+- Gestão de clientes e histórico de pedidos
+- Rastreamento de entregas
+- Conta do cliente
+- Multi-tenant por subdomínio
+- Responsivo para mobile
+
+## Tecnologias
+
+- **Frontend**: React + TypeScript + Vite + TailwindCSS
+- **Backend**: Node.js + Express
+- **Microserviço de frete**: Python 3 (stdlib)
+- **Banco**: PostgreSQL
+- **Pagamentos**: Mercado Pago SDK
 
 ## Pré-requisitos
 
 - Node.js 18+
-- Python 3.12+ (para microserviço de frete)
-- PostgreSQL 14+ (via Docker recomendado)
-- Conta no Mercado Pago (para pagamentos)
+- Python 3.12+
+- Docker (para PostgreSQL)
 
-## Instalação Rápida
+## Instalação local
 
-1. **Clone o repositório**
+### 1. Banco de dados
+
 ```bash
-git clone <repo-url>
-cd vitrine
-```
-
-2. **Instale as dependências**
-```bash
-npm install
-```
-
-3. **Configure o banco de dados**
-```bash
-# Inicie o PostgreSQL via Docker
 docker run -d \
   --name vitrinepro-postgres \
   -e POSTGRES_PASSWORD=postgres \
@@ -49,155 +42,189 @@ docker run -d \
   -p 5432:5432 \
   postgres:14
 
-# Execute as migrations
-docker exec vitrinepro-postgres psql -U postgres -d vitrinepro < database/schema.sql
-docker exec vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-status-standardization.sql
-docker exec vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-markup.sql
-docker exec vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-frete.sql
-
-# Configure timezone
+docker exec -i vitrinepro-postgres psql -U postgres -d vitrinepro < database/schema.sql
+docker exec -i vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-status-standardization.sql
+docker exec -i vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-markup.sql
+docker exec -i vitrinepro-postgres psql -U postgres -d vitrinepro < database/migration-frete.sql
 docker exec vitrinepro-postgres psql -U postgres -d vitrinepro -c "ALTER DATABASE vitrinepro SET timezone TO 'America/Sao_Paulo';"
 ```
 
-4. **Configure as variáveis de ambiente**
-```bash
-# Backend (.env na pasta backend/)
-MERCADOPAGO_ACCESS_TOKEN=seu_token_aqui
+### 2. Variáveis de ambiente
+
+Crie `backend/.env`:
+
+```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/vitrinepro
 PORT=3001
+MERCADOPAGO_ACCESS_TOKEN=seu_token_aqui
+FRONTEND_URL=http://localhost:5173
 ```
 
-5. **Inicie o microserviço de frete (Python)**
+### 3. Dependências e admin
+
 ```bash
-cd frete-service
-python3 server.py
-# Rodará na porta 5001
+npm install
+cd backend && npm install
+node setup-admin.js   # cria admin@admin.com / admin
 ```
 
-6. **Inicie o backend (Node.js)**
-```bash
-cd backend
-node server.js
-# Rodará na porta 3001
-```
+### 4. Iniciar serviços
 
-7. **Inicie o frontend (React)**
 ```bash
+# Terminal 1 — microserviço de frete
+cd frete-service && python3 server.py
+
+# Terminal 2 — backend
+cd backend && node server.js
+
+# Terminal 3 — frontend
 npm run dev
-# Rodará na porta 5173
 ```
 
-8. **Configure o sistema**
-- Acesse: http://localhost:5173/admin
-- Vá em "Configurações"
-- Configure:
-  - CEP de Origem (para cálculo de frete)
-  - Margem de Lucro (%)
-  - Outras configurações
+### 5. Acessar
 
-9. **Acesse o sistema**
 - Frontend: http://localhost:5173
+- Admin: http://localhost:5173/admin
 - Backend: http://localhost:3001
-- Microserviço Frete: http://localhost:5001
+- Frete: http://localhost:5001
 
-## Documentação Completa
+### 6. Configuração inicial
 
-📚 **[Índice Completo da Documentação](DOCS_INDEX.md)** - Navegue por toda a documentação
+No painel admin → Configurações:
+- CEP de origem (para cálculo de frete)
+- Margem de lucro (%)
+- Nome, logo e cores da loja
 
-### Guias Principais
-- [Instalação Detalhada](SETUP.md)
-- [Referência Rápida](QUICK_REFERENCE.md)
-- [Solução de Problemas](TROUBLESHOOTING.md)
+## Deploy na EC2 (Ubuntu)
 
-### Documentação Técnica
-- [Documentação Completa](DOCUMENTACAO.md)
-- [Sistema de Frete](FRETE.md) 🆕
-- [Sistema de Status](STATUS_PADRONIZACAO.md)
-- [Integração Mercado Pago](MERCADOPAGO.md)
-- [Banco de Dados](database/INSTALL.md)
+### Instalar dependências
 
-### Deploy e Infraestrutura
-- [Configuração Docker](DOCKER_SETUP.md)
-- [Deploy na AWS EC2](DEPLOY_EC2.md)
+```bash
+sudo apt update && sudo apt upgrade -y
 
-### Histórico
-- [Changelog](CHANGELOG.md)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs docker.io docker-compose nginx
+sudo npm install -g pm2
+
+sudo systemctl start docker && sudo systemctl enable docker
+sudo usermod -aG docker ubuntu
+```
+
+### Subir a aplicação
+
+```bash
+git clone <repo-url>
+cd vitrinepro-catalog
+
+# Banco
+docker-compose up -d
+
+# Backend
+cd backend && npm install
+node setup-admin.js
+pm2 start server.js --name vitrinepro-backend
+pm2 save && pm2 startup
+
+# Frontend
+cd .. && npm install && npm run build
+```
+
+### Nginx
+
+```bash
+sudo nano /etc/nginx/sites-available/vitrinepro
+```
+
+```nginx
+server {
+    listen 80;
+    server_name SEU-DOMINIO.com;
+
+    location / {
+        root /home/ubuntu/vitrinepro-catalog/dist;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/vitrinepro /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl restart nginx
+```
+
+### HTTPS
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d seudominio.com
+```
+
+### Atualizar
+
+```bash
+cd ~/vitrinepro-catalog && git pull
+cd backend && npm install && pm2 restart vitrinepro-backend
+cd .. && npm install && npm run build && sudo systemctl reload nginx
+```
+
+## Comandos úteis
+
+```bash
+# Logs do backend
+pm2 logs vitrinepro-backend
+
+# Status
+pm2 status
+
+# Reiniciar banco
+docker restart vitrinepro-postgres
+
+# Backup do banco
+docker exec vitrinepro-postgres pg_dump -U postgres vitrinepro > backup_$(date +%Y%m%d).sql
+
+# Restore
+docker exec -i vitrinepro-postgres psql -U postgres -d vitrinepro < backup.sql
+
+# Health check
+curl http://localhost:3001/api/health
+```
+
+## Troubleshooting
+
+| Problema | Solução |
+|----------|---------|
+| Backend não inicia | `pm2 logs vitrinepro-backend` — verificar `.env` |
+| Banco não conecta | `docker start vitrinepro-postgres` |
+| Porta 3001 ocupada | `lsof -i :3001` e `kill -9 <PID>` |
+| Login não funciona | `cd backend && node setup-admin.js` |
+| Frontend não carrega | `ls dist/` — verificar se build foi feito |
+| Emails não enviam | `pm2 logs \| grep -i email` — verificar SMTP no `.env` |
 
 ## Arquitetura
 
-### Microserviços
 ```
-┌─────────────────┐
-│  Frontend React │ :5173
-│  (TypeScript)   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Backend Node   │ :3001
-│  (Express)      │
-└────┬────────┬───┘
-     │        │
-     │        └──────────┐
-     ▼                   ▼
-┌─────────────┐   ┌──────────────┐
-│ PostgreSQL  │   │ Microserviço │
-│   Banco     │   │ Frete Python │ :5001
-└─────────────┘   └──────────────┘
+Frontend React :5173
+      │
+      ▼
+Backend Node.js :3001
+      │              │
+      ▼              ▼
+PostgreSQL    Microserviço
+              Frete Python :5001
 ```
 
-## Estrutura do Projeto
+## Status dos pedidos
 
-```
-vitrine/
-├── frete-service/       # 🆕 Microserviço Python
-│   ├── server.py       # Cálculo de frete
-│   └── README.md       # Documentação
-├── backend/            # API Node.js + Express
-│   ├── server.js      # Servidor principal
-│   └── statusManager.js
-├── services/           # 🆕 Serviços frontend
-│   ├── freteService.ts # Cliente HTTP frete
-│   └── pricing.ts     # Cálculo de margem
-├── components/         # Componentes React
-│   ├── AdminDashboard.tsx
-│   ├── CartDrawer.tsx # 🆕 Com cálculo de frete
-│   ├── PaymentForm.tsx
-│   └── ...
-├── pages/             # Páginas React
-│   ├── CheckoutPage.tsx # 🆕 Com frete
-│   └── ...
-├── database/          # Schemas e migrations
-│   ├── migration-frete.sql # 🆕
-│   └── migration-markup.sql # 🆕
-└── docs/             # Documentação
-```
+**Pagamento:** `PAYMENT_PENDING` → `PAYMENT_PROCESSING` → `PAYMENT_APPROVED` / `PAYMENT_REFUSED` / `PAYMENT_CANCELED` / `PAYMENT_EXPIRED` / `PAYMENT_REFUNDED`
 
-## Tecnologias
-
-- **Frontend**: React + TypeScript + Vite + TailwindCSS
-- **Backend**: Node.js + Express
-- **Microserviço**: Python 3 (stdlib apenas)
-- **Banco**: PostgreSQL
-- **Pagamentos**: Mercado Pago SDK
-- **UI**: Lucide React (ícones)
-
-## Novidades v2.0
-
-### Sistema de Frete
-- ✅ Microserviço Python independente
-- ✅ Cálculo PAC e SEDEX
-- ✅ Baseado em tabelas dos Correios
-- ✅ Configuração de CEP origem
-- ✅ Seleção de frete no carrinho
-- ✅ Frete salvo no pedido
-
-### Sistema de Margem/Markup
-- ✅ Configuração de margem percentual
-- ✅ Aplicação automática nos preços
-- ✅ Desconto PIX igual à margem
-- ✅ Cálculo inverso correto
-
-## Suporte
-
-Para dúvidas ou problemas, consulte a documentação completa ou abra uma issue.
+**Pedido:** `ORDER_PENDING_PAYMENT` → `ORDER_PAID` → `ORDER_PREPARING` → `ORDER_SHIPPED` → `ORDER_DELIVERED` / `ORDER_CANCELED` / `ORDER_REFUNDED`
